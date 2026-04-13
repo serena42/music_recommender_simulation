@@ -31,7 +31,30 @@ Prompts:
 
 Avoid code here. Pretend you are explaining the idea to a friend who does not program.
 
-This recommender uses both a scoring rule and a ranking rule. The scoring rule evaluates one song at a time and gives it a relevance score based on genre match, mood match, and how close numeric features (like energy and acousticness) are to the user's preferences. The ranking rule then compares all song scores, sorts them from highest to lowest, and returns the top results. We need both parts because scoring tells us how well each individual song fits, while ranking turns those individual scores into a final recommendation list.
+Algorithm recipe: this recommender uses additive point scoring and ranking. Each song earns raw points across four features: a genre match is worth up to 2.0 points, a mood match up to 1.0 point, energy closeness up to 1.0 point, and acousticness closeness up to 0.5 points, for a maximum possible score of 4.5. Genre and mood use partial credit when a song matches a lower-ranked preference. Energy and acousticness use a closeness function — the nearer the song's value is to the user's target, the more points it earns. The four contributions are summed into one total score, all songs are sorted highest to lowest, and the top k results are returned with short explanations of the strongest matched factors.
+
+Weighting rationale: genre counts twice as much as mood (2.0 vs 1.0) because genre is a strong long-term taste signal — most listeners have hard genre preferences — while mood is contextual and shifts with situation. Energy and acousticness are continuous signals that serve as meaningful tiebreakers between songs that already match on genre and mood.
+
+Data flow:
+
+```mermaid
+flowchart TD
+    A([User Preferences\ngenre · mood · energy · likes_acoustic]) --> B
+
+    B[Load songs.csv\n18 songs → Song objects] --> C
+
+    C{For each song in catalog} --> D
+
+    D[Score the song\ngenre match   → up to 2.0 pts\nmood match    → up to 1.0 pts\nenergy close  → up to 1.0 pts\nacoustic close→ up to 0.5 pts\n─────────────────────\ntotal score   ≤ 4.5 pts] --> E
+
+    E{More songs?}
+    E -- Yes --> C
+    E -- No  --> F
+
+    F[Sort all scores\nhigh to low] --> G
+
+    G([Top K Results\nsong · score · explanation])
+```
 
 ---
 
@@ -113,4 +136,4 @@ Prompts:
 - Something unexpected or interesting you discovered  
 - How this changed the way you think about music recommendation apps  
 
-I asked Copilot to help design a math-based scoring rule for my music recommender, and we chose a closeness approach for numeric features so songs score higher when they are nearer to the user’s target values, not simply higher or lower overall. For example, a song with energy very close to the user’s preferred energy gets more points than songs far above or below that target. We then combined numeric closeness with categorical matches (genre and mood) using a weighted sum, which keeps the model simple and interpretable. We set genre to be slightly more important than mood because it usually represents a stronger long-term taste signal, while mood can vary by context. This process helped me understand how recommendation systems turn user preferences into measurable rules and how weight choices directly shape the final ranking.
+I asked Claude to help design a math-based scoring rule for my music recommender, and we chose a closeness approach for numeric features so songs score higher when they are nearer to the user’s target values, not simply higher or lower overall. For example, a song with energy very close to the user’s preferred energy gets more points than songs far above or below that target. We then combined numeric closeness with categorical matches (genre and mood) using additive point values, which keeps the model simple and interpretable. After comparing approaches, we moved from a normalized weight system (all weights summing to 1.0) to an explicit point recipe: genre is worth 2.0 points, mood 1.0, energy up to 1.0, and acousticness up to 0.5. The 2-to-1 genre-to-mood ratio was a deliberate design choice — genre tends to be a hard filter for most listeners while mood shifts with context. This process helped me understand how recommendation systems turn user preferences into measurable rules and how weight choices directly shape the final ranking.

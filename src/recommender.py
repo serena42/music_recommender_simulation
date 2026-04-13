@@ -4,14 +4,18 @@ from typing import List, Dict, Tuple, Optional
 from dataclasses import dataclass
 
 
+# Additive point values — scores are NOT normalized to [0, 1].
+# Design rationale:
+#   Genre is a hard long-term preference (2.0 pts); mood is contextual and
+#   situational, so it counts half as much (1.0 pt).  Energy and acousticness
+#   are continuous signals scored by closeness, giving songs that nail the
+#   numeric feel a meaningful boost without overriding categorical matches.
+#   Max possible score: 2.0 + 1.0 + 1.0 + 0.5 = 4.5
 FEATURE_WEIGHTS = {
-    "genre": 0.30,
-    "mood": 0.25,
-    "energy": 0.20,
-    "acousticness": 0.15,
-    "tempo_bpm": 0.05,
-    "danceability": 0.03,
-    "valence": 0.02,
+    "genre": 2.0,
+    "mood": 1.0,
+    "energy": 1.0,
+    "acousticness": 0.5,
 }
 
 
@@ -52,11 +56,6 @@ def _score_song(song: Song, user: UserProfile) -> Tuple[float, Dict[str, float]]
     contributions["mood"] = FEATURE_WEIGHTS["mood"] * mood_match
     contributions["energy"] = FEATURE_WEIGHTS["energy"] * _closeness(user.target_energy, song.energy)
     contributions["acousticness"] = FEATURE_WEIGHTS["acousticness"] * _closeness(acoustic_target, song.acousticness)
-
-    # Secondary tie-breaker features for smoother ranking among similar songs.
-    contributions["tempo_bpm"] = FEATURE_WEIGHTS["tempo_bpm"] * _closeness(100.0, song.tempo_bpm, max_range=100.0)
-    contributions["danceability"] = FEATURE_WEIGHTS["danceability"] * song.danceability
-    contributions["valence"] = FEATURE_WEIGHTS["valence"] * song.valence
 
     total_score = sum(contributions.values())
     return total_score, contributions
