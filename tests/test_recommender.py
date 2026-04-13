@@ -431,3 +431,123 @@ def test_recommend_songs_reads_energy_flexibility_from_dict():
     results = recommend_songs(user, songs, k=2)
     assert len(results) == 2
     assert results[0][0]["title"] == "Near Energy"
+
+
+def test_optional_danceability_and_valence_can_break_ties():
+    """Optional danceability/valence targets should influence tie-like candidates."""
+    songs = [
+        Song(
+            id=1,
+            title="Dance Match",
+            artist="Artist",
+            genre="pop",
+            mood="happy",
+            energy=0.7,
+            tempo_bpm=120,
+            valence=0.9,
+            danceability=0.9,
+            acousticness=0.2,
+        ),
+        Song(
+            id=2,
+            title="Dance Mismatch",
+            artist="Artist",
+            genre="pop",
+            mood="happy",
+            energy=0.7,
+            tempo_bpm=120,
+            valence=0.2,
+            danceability=0.2,
+            acousticness=0.2,
+        ),
+    ]
+    rec = Recommender(songs)
+
+    user_without_optional = UserProfile(
+        favorite_genre="pop",
+        favorite_mood="happy",
+        target_energy=0.7,
+        energy_flexibility=0.5,
+        acoustic_preference=0.2,
+    )
+    user_with_optional = UserProfile(
+        favorite_genre="pop",
+        favorite_mood="happy",
+        target_energy=0.7,
+        energy_flexibility=0.5,
+        acoustic_preference=0.2,
+        target_danceability=0.9,
+        target_valence=0.9,
+    )
+
+    no_optional = rec.recommend(user_without_optional, k=2)
+    with_optional = rec.recommend(user_with_optional, k=2)
+
+    # Without optional tie-breakers, insertion order is preserved for equal core scores.
+    assert no_optional[0].title == "Dance Match"
+    # With optional targets, the better dance/valence fit should still lead.
+    assert with_optional[0].title == "Dance Match"
+
+
+def test_recommend_songs_reads_optional_danceability_and_valence_from_dict():
+    """Functional API should parse optional danceability/valence user targets."""
+    from src.recommender import recommend_songs
+
+    songs = [
+        {
+            "id": "1",
+            "title": "Closer Optional Fit",
+            "artist": "Artist",
+            "genre": "pop",
+            "mood": "happy",
+            "energy": 0.6,
+            "tempo_bpm": 100,
+            "valence": 0.85,
+            "danceability": 0.85,
+            "acousticness": 0.2,
+        },
+        {
+            "id": "2",
+            "title": "Far Optional Fit",
+            "artist": "Artist",
+            "genre": "pop",
+            "mood": "happy",
+            "energy": 0.6,
+            "tempo_bpm": 100,
+            "valence": 0.2,
+            "danceability": 0.2,
+            "acousticness": 0.2,
+        },
+    ]
+
+    user = {
+        "genre": "pop",
+        "mood": "happy",
+        "energy": 0.6,
+        "energy_flexibility": 0.5,
+        "acoustic_preference": 0.2,
+        "target_danceability": 0.9,
+        "target_valence": 0.9,
+    }
+
+    results = recommend_songs(user, songs, k=2)
+    assert len(results) == 2
+    assert results[0][0]["title"] == "Closer Optional Fit"
+
+
+def test_explanation_can_reference_new_optional_features():
+    """Explanation text should mention optional features when strongly matched."""
+    user = UserProfile(
+        favorite_genre="pop",
+        favorite_mood="happy",
+        target_energy=0.8,
+        energy_flexibility=0.5,
+        acoustic_preference=0.2,
+        target_danceability=0.8,
+        target_valence=0.9,
+    )
+    rec = make_small_recommender()
+    song = rec.songs[0]
+
+    explanation = rec.explain_recommendation(user, song).lower()
+    assert "danceability" in explanation or "positivity" in explanation

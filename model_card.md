@@ -31,23 +31,23 @@ Prompts:
 
 Avoid code here. Pretend you are explaining the idea to a friend who does not program.
 
-Algorithm recipe: this recommender uses additive point scoring and ranking. Each song earns raw points across four features: a genre match is worth up to 2.0 points, a mood match up to 1.0 point, energy closeness up to 1.0 point, and acousticness closeness up to 1.0 point, for a maximum possible score of 5.0. Genre and mood use ranked partial credit with exponential decay (1.0, 0.8, 0.64, 0.51, ...), so secondary preferences continue to matter. Energy and acousticness use a closeness function — the nearer the song's value is to the user's target, the more points it earns. Energy closeness now supports a user-specific flexibility control (`energy_flexibility`), which widens or narrows the accepted energy range. Acoustic preference is modeled as a spectrum from 0.0 (prefers less acoustic) to 1.0 (prefers more acoustic), not a binary flag. The four contributions are summed into one total score, all songs are sorted highest to lowest, and the top k results are returned with short explanations of the strongest matched factors.
+Algorithm recipe: this recommender uses additive point scoring and ranking. Each song earns raw points across core features: a genre match is worth up to 2.0 points, a mood match up to 1.0 point, energy closeness up to 1.0 point, and acousticness closeness up to 1.0 point, for a core maximum score of 5.0. Genre and mood use ranked partial credit with exponential decay (1.0, 0.8, 0.64, 0.51, ...), so secondary preferences continue to matter. Energy and acousticness use a closeness function — the nearer the song's value is to the user's target, the more points it earns. Energy closeness now supports a user-specific flexibility control (`energy_flexibility`), which widens or narrows the accepted energy range. Acoustic preference is modeled as a spectrum from 0.0 (prefers less acoustic) to 1.0 (prefers more acoustic), not a binary flag. The model also supports optional tie-breaker signals: danceability (up to +0.2) and valence (up to +0.1) when the user provides those targets. Contributions are summed into one total score, songs are sorted highest to lowest, and the top k results are returned with short explanations of the strongest matched factors.
 
 Weighting rationale: genre counts twice as much as mood (2.0 vs 1.0) because genre is a strong long-term taste signal — most listeners have hard genre preferences — while mood is contextual and shifts with situation. Energy and acousticness are continuous signals that serve as meaningful tiebreakers between songs that already match on genre and mood.
 
-Potential biases: because genre carries 2.0 points and mood only 1.0, a song that perfectly matches the user's mood but sits in the wrong genre will always rank below a genre-matching song — even if the mood fit is strong. This means the system may over-prioritize genre and surface familiar-sounding songs over ones that would actually feel right in the moment. Additionally, since energy and acousticness are the only continuous signals scored, qualities like danceability, tempo, and valence earn no points — genres that tend to score low on energy and acousticness (blues, country, reggae) may be systematically under-recommended even for users with broadly compatible tastes.
+Potential biases: because genre carries 2.0 points and mood only 1.0, a song that perfectly matches the user's mood but sits in the wrong genre will always rank below a genre-matching song — even if the mood fit is strong. This means the system may over-prioritize genre and surface familiar-sounding songs over ones that would actually feel right in the moment. Also, danceability and valence are intentionally low-weight tie-breakers, so they improve nuance but may still be too weak for users who consider those attributes primary.
 
 Data flow:
 
 ```mermaid
 flowchart TD
-    A([User Preferences\ngenre · mood · energy · energy_flexibility · acoustic_preference]) --> B
+    A([User Preferences\ngenre · mood · energy · energy_flexibility · acoustic_preference\noptional: target_danceability · target_valence]) --> B
 
     B[Load songs.csv\n18 songs → Song objects] --> C
 
     C{For each song in catalog} --> D
 
-    D[Score the song\ngenre match   → up to 2.0 pts\nmood match    → up to 1.0 pts\nenergy close  → up to 1.0 pts\nacoustic close→ up to 1.0 pts\n─────────────────────\ntotal score   ≤ 5.0 pts] --> E
+    D[Score the song\ngenre match    → up to 2.0 pts\nmood match     → up to 1.0 pts\nenergy close   → up to 1.0 pts\nacoustic close → up to 1.0 pts\ndanceability   → up to 0.2 pts (optional)\nvalence        → up to 0.1 pts (optional)\n─────────────────────\ntotal score   ≤ 5.3 pts] --> E
 
     E{More songs?}
     E -- Yes --> C
@@ -147,12 +147,18 @@ The algorithm is greedy—it returns the highest-scoring songs every time.
 - Top-5 will likely cluster around the same genre, mood, and narrow energy band.
 - **Effect:** Users never discover new artists or styles, only deeper dives into what they already know. Perfect filter bubble reinforcement.
 
-**6. Missing Continuous Features (MEDIUM severity)**
+**6. Missing Continuous Features (MEDIUM severity) — PARTIALLY MITIGATED**
 
-Danceability and valence (positivity) are loaded from the dataset but never scored. Tempo (BPM) is never scored.
+Status: implemented in the current codebase (Fix #6 rollout).
 
-- Songs with high danceability (for dance lovers) or high valence (for happy listeners) cannot be recommended based on these traits.
-- **Effect:** Entire patterns of taste go unaddressed. A user who wants upbeat music has no explicit way to signal that; they must infer it through energy and mood alone.
+Danceability and valence are now supported as optional user targets and scored as low-weight tie-breakers:
+
+- danceability weight: 0.2
+- valence weight: 0.1
+
+Effect: users can now explicitly signal "more danceable" or "more positive" preferences, improving fine-grained ranking among otherwise similar songs.
+
+Residual gap: tempo (BPM) is still not scored.
 
 ### Suggested Fixes and Implementation Status
 
@@ -192,7 +198,7 @@ No hard floor; even distant preferences contribute meaningfully.
 
 Rerank top-k after scoring: once a song enters the top-5, penalize the remaining songs if they share genre/mood with any already-selected song. Use a small penalty (~0.1 points per shared dimension) to encourage variety without breaking overall preference ordering.
 
-**Fix #6: Score Danceability and Valence (addresses Filter Bubble #6)**
+**Fix #6: Score Danceability and Valence (addresses Filter Bubble #6) — COMPLETED**
 
 Add optional user preferences for `target_danceability: float` and `target_valence: float` (default = None, so they don't affect users who don't specify).
 
@@ -226,7 +232,7 @@ Ideas for how you would improve the model next.
 - ✅ Introduced slower ranked preference decay (exponential instead of linear) so secondary tastes have real impact.
 - ✅ Replaced boolean acoustic preference with a spectrum (0.0–1.0), removing the hard filter.
 - ✅ Added user energy flexibility so contextual energy preferences are supported.
-- Score missing features (danceability, valence) for users who care about them.
+- ✅ Scored missing features (danceability, valence) for users who care about them.
 - Implement diversity penalty in top-k selection to reduce genre/mood clustering.
 
 **Medium-term enhancements:**

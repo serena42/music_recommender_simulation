@@ -22,6 +22,8 @@ HIGH_ENERGY_POP = {
     "energy": 0.80,
     "energy_flexibility": 0.35,
     "acoustic_preference": 0.1,
+    "target_danceability": 0.85,
+    "target_valence": 0.85,
 }
 
 CHILL_LOFI = {
@@ -32,6 +34,8 @@ CHILL_LOFI = {
     "energy": 0.35,
     "energy_flexibility": 0.7,
     "acoustic_preference": 0.9,
+    "target_danceability": 0.45,
+    "target_valence": 0.55,
 }
 
 DEEP_INTENSE_ROCK = {
@@ -42,6 +46,8 @@ DEEP_INTENSE_ROCK = {
     "energy": 0.90,
     "energy_flexibility": 0.2,
     "acoustic_preference": 0.05,
+    "target_danceability": 0.55,
+    "target_valence": 0.45,
 }
 
 # Edge case / adversarial profiles designed to stress-test the scoring logic.
@@ -74,6 +80,8 @@ PURE_ADRENALINE = {
     "energy": 0.98,  # Extremely high energy boundary
     "energy_flexibility": 0.15,
     "acoustic_preference": 0.0,
+    "target_danceability": 0.9,
+    "target_valence": 0.9,
 }
 
 ACOUSTIC_ROCKER = {
@@ -94,6 +102,8 @@ EVERYTHING_GOES = {
     "energy": 0.50,  # Middle ground
     "energy_flexibility": 1.0,
     "acoustic_preference": 0.4,
+    "target_danceability": 0.6,
+    "target_valence": 0.6,
 }
 
 

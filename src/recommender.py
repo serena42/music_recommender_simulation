@@ -10,12 +10,15 @@ from dataclasses import dataclass
 #   situational, so it counts half as much (1.0 pt). Energy and acousticness
 #   are continuous signals scored by closeness, giving songs that nail the
 #   numeric feel a meaningful boost without overriding categorical matches.
-#   Max possible score: 2.0 + 1.0 + 1.0 + 1.0 = 5.0
+#   Optional tie-breakers (danceability, valence) can add small increments.
+#   Max possible score with all optional targets set: 5.3
 FEATURE_WEIGHTS = {
     "genre": 2.0,
     "mood": 1.0,
     "energy": 1.0,
     "acousticness": 1.0,
+    "danceability": 0.2,
+    "valence": 0.1,
 }
 
 
@@ -110,7 +113,8 @@ def _score_song(song: Song, user: UserProfile) -> Tuple[float, Dict[str, float],
 
     Returns:
         A tuple of:
-        - total_score (float): Sum of all feature contributions, max 5.0.
+                - total_score (float): Sum of all feature contributions, up to 5.3
+                    when optional danceability and valence targets are provided.
         - contributions (Dict[str, float]): Points earned per feature.
         - reasons (List[str]): Human-readable strings for each non-zero contribution,
           e.g. ["genre match (+2.00)", "energy closeness (+0.93)"].
@@ -133,6 +137,19 @@ def _score_song(song: Song, user: UserProfile) -> Tuple[float, Dict[str, float],
         user.acoustic_preference,
         song.acousticness,
     )
+    contributions["danceability"] = 0.0
+    contributions["valence"] = 0.0
+
+    if user.target_danceability is not None:
+        contributions["danceability"] = FEATURE_WEIGHTS["danceability"] * _closeness(
+            user.target_danceability,
+            song.danceability,
+        )
+    if user.target_valence is not None:
+        contributions["valence"] = FEATURE_WEIGHTS["valence"] * _closeness(
+            user.target_valence,
+            song.valence,
+        )
 
     if contributions["genre"] > 0:
         reasons.append(f"genre match (+{contributions['genre']:.2f})")
@@ -142,6 +159,10 @@ def _score_song(song: Song, user: UserProfile) -> Tuple[float, Dict[str, float],
         reasons.append(f"energy closeness (+{contributions['energy']:.2f})")
     if contributions["acousticness"] > 0:
         reasons.append(f"acousticness closeness (+{contributions['acousticness']:.2f})")
+    if contributions["danceability"] > 0:
+        reasons.append(f"danceability closeness (+{contributions['danceability']:.2f})")
+    if contributions["valence"] > 0:
+        reasons.append(f"valence closeness (+{contributions['valence']:.2f})")
 
     total_score = sum(contributions.values())
     return total_score, contributions, reasons
@@ -183,6 +204,11 @@ def _build_explanation(song: Song, user: UserProfile, contributions: Dict[str, f
             reasons.append("is less acoustic, which matches your preference")
         else:
             reasons.append("matches your balanced acoustic preference")
+
+    if user.target_danceability is not None and _closeness(user.target_danceability, song.danceability) >= 0.85:
+        reasons.append("has a danceability level close to your target")
+    if user.target_valence is not None and _closeness(user.target_valence, song.valence) >= 0.85:
+        reasons.append("has a positivity level close to your target")
 
     if not reasons:
         top_factor = max(contributions, key=contributions.get)
@@ -231,6 +257,8 @@ class UserProfile:
             0.0 means stricter matching; 1.0 means more flexible matching.
         acoustic_preference: Preferred acousticness from 0.0 to 1.0.
             0.0 means strongly non-acoustic, 1.0 means strongly acoustic.
+        target_danceability: Optional danceability target, 0.0 to 1.0.
+        target_valence: Optional valence (positivity) target, 0.0 to 1.0.
         preferred_genres: Optional ordered list of genres (most to least preferred).
             Falls back to [favorite_genre] when not provided.
         preferred_moods: Optional ordered list of moods (most to least preferred).
@@ -241,6 +269,8 @@ class UserProfile:
     target_energy: float
     energy_flexibility: float = 0.5
     acoustic_preference: float = 0.5
+    target_danceability: Optional[float] = None
+    target_valence: Optional[float] = None
     preferred_genres: Optional[List[str]] = None
     preferred_moods: Optional[List[str]] = None
 
@@ -326,6 +356,7 @@ def recommend_songs(user_prefs: Dict, songs: List[Dict], k: int = 5) -> List[Tup
     Args:
         user_prefs: Dict of user preference keys — "genre", "mood", "energy",
             "energy_flexibility" (0.0-1.0), "acoustic_preference" (0.0-1.0),
+            optional "target_danceability" and "target_valence",
             and optionally "genres" and "moods" for ranked lists.
             Legacy "likes_acoustic" is still accepted.
         songs: List of song dicts as returned by load_songs.
@@ -347,6 +378,16 @@ def recommend_songs(user_prefs: Dict, songs: List[Dict], k: int = 5) -> List[Tup
         target_energy=float(user_prefs.get("energy", 0.5)),
         energy_flexibility=float(user_prefs.get("energy_flexibility", 0.5)),
         acoustic_preference=float(acoustic_pref),
+        target_danceability=(
+            float(user_prefs["target_danceability"])
+            if user_prefs.get("target_danceability") is not None
+            else None
+        ),
+        target_valence=(
+            float(user_prefs["target_valence"])
+            if user_prefs.get("target_valence") is not None
+            else None
+        ),
         preferred_genres=user_prefs.get("genres"),
         preferred_moods=user_prefs.get("moods"),
     )
