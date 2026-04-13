@@ -30,7 +30,7 @@ UserProfile features used in this simulation:
 - preferred_genres (ordered list for partial-credit matching)
 - preferred_moods (ordered list for partial-credit matching)
 - target_energy
-- likes_acoustic
+- acoustic_preference
 
 ### Scoring Rule
 
@@ -43,10 +43,11 @@ For each song, the recommender computes an additive point score with a maximum o
 
 Genre and mood use partial credit for lower-ranked preferences and substring matching (so "indie pop" matches "pop"). Numeric features use a closeness function — the nearer a song's value is to the target, the more points it earns.
 
-For acousticness, the user preference is converted to a target:
+For acousticness, the user sets a continuous preference target:
 
-- likes_acoustic = true -> target 1.0
-- likes_acoustic = false -> target 0.0
+- acoustic_preference = 1.0 -> strongly acoustic
+- acoustic_preference = 0.0 -> strongly non-acoustic
+- acoustic_preference around 0.5 -> balanced acoustic/electric preference
 
 After scoring all songs, the system sorts by score in descending order and returns the top k songs.
 
@@ -60,7 +61,7 @@ Main data types currently used:
 
 - Song metadata: title, artist, genre, mood
 - Audio-style numeric features: energy, tempo_bpm, valence, danceability, acousticness
-- User preference inputs: favorite_genre, favorite_mood, preferred_genres, preferred_moods, target_energy, likes_acoustic
+- User preference inputs: favorite_genre, favorite_mood, preferred_genres, preferred_moods, target_energy, acoustic_preference
 
 Data types not included yet:
 
@@ -142,6 +143,68 @@ You can add more tests in `tests/test_recommender.py`.
 
 ---
 
+## Screenshots
+
+Terminal outputs for all profile experiments are included below.
+
+![High-Energy Pop and Chill Lofi](screenshots/01-high-energy-pop-chill-lofi.png)
+
+![Deep Intense Rock and Conflicting Vibe](screenshots/02-deep-intense-rock-conflicting-vibe.png)
+
+![Ultra Chill and Pure Adrenaline](screenshots/03-ultra-chill-pure-adrenaline.png)
+
+![Acoustic Rocker and Everything Goes](screenshots/04-acoustic-rocker-everything-goes.png)
+
+---
+
+## Optional Extensions Mapping
+
+This section maps the implemented extension work to optional rubric criteria.
+
+### 1) Additional Song Attributes
+
+The dataset includes more than the minimum required attributes in `data/songs.csv`:
+
+- Core metadata: `id`, `title`, `artist`, `genre`, `mood`
+- Numeric/music attributes: `energy`, `tempo_bpm`, `valence`, `danceability`, `acousticness`
+
+Scoring uses multiple expanded attributes in `src/recommender.py`:
+
+- `acousticness` (main weighted feature)
+- `danceability` (optional tie-breaker)
+- `valence` (optional tie-breaker)
+
+### 2) Diversity / Novelty / Fairness Component
+
+Implemented in `src/recommender.py` via diversity-aware reranking:
+
+- Optional `diversify` switch
+- Repeat penalties for artist and genre
+- Adjustable penalties: `artist_repeat_penalty`, `genre_repeat_penalty`
+
+Fairness and filter-bubble impact is documented in `model_card.md` under limitations/mitigations.
+
+### 3) Multiple Ranking Modes (Modular)
+
+Two ranking strategies are available through a modular path in `src/recommender.py`:
+
+- Base mode: pure score sort (default)
+- Diversity mode: greedy reranking with repeat penalties
+
+Mode switching is exposed through user/profile preferences and demonstrated in `src/main.py` (for example, the `EVERYTHING_GOES` profile enables `diversify`).
+
+### 4) Visual Output / Summary Table
+
+Implemented in `src/main.py`:
+
+- Formatted ASCII table output
+- Columns include rank, song, score, and reasons
+- Wrapped multi-line reason text for readability
+
+Evidence screenshots are embedded above in the Screenshots section.
+
+---
+
 ## User Preference Profiles
 
 The recommender is tested with three distinct taste archetypes defined in `src/main.py`:
@@ -150,7 +213,7 @@ The recommender is tested with three distinct taste archetypes defined in `src/m
 - Preferred genres: pop, funk, indie pop
 - Preferred moods: happy, playful, confident
 - Energy: 0.80 (high)
-- Acoustic preference: False
+- Acoustic preference: 0.10
 
 Example top recommendation: "Sunrise City" (pop, happy, 0.82 energy)
 
@@ -158,7 +221,7 @@ Example top recommendation: "Sunrise City" (pop, happy, 0.82 energy)
 - Preferred genres: lofi, ambient
 - Preferred moods: chill, focused, peaceful
 - Energy: 0.35 (very low)
-- Acoustic preference: True
+- Acoustic preference: 0.90
 
 Example top recommendation: "Library Rain" (lofi, chill, 0.35 energy, 0.86 acoustic)
 
@@ -166,7 +229,7 @@ Example top recommendation: "Library Rain" (lofi, chill, 0.35 energy, 0.86 acous
 - Preferred genres: rock, metal, hip hop
 - Preferred moods: intense, aggressive, confident
 - Energy: 0.90 (very high)
-- Acoustic preference: False
+- Acoustic preference: 0.05
 
 Example top recommendation: "Storm Runner" (rock, intense, 0.91 energy)
 
@@ -190,7 +253,7 @@ Five additional profiles stress-test the scoring logic with conflicting or bound
 - Result: Laser Marathon (edm, 0.94 energy) scores highest. System handles high boundaries well.
 
 **Acoustic Rocker (Unusual Combo)**
-- Genre: rock, Acoustic preference: True
+- Genre: rock, Acoustic preference: 0.80
 - Tests: Do unusual preference combinations confuse the recommender?
 - Result: Storm Runner (rock, non-acoustic) scores highest because genre/mood/energy match outweigh the acoustic mismatch. System prioritizes primary preferences.
 
@@ -218,7 +281,7 @@ I tested this taste profile:
 - genre: hip hop
 - mood: confident
 - energy: 0.78
-- likes_acoustic: false
+- acoustic_preference: 0.10
 
 To check whether the profile can separate contrasting styles, I compared one intense rock song with several chill lofi songs.
 
