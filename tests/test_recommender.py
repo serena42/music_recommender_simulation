@@ -35,7 +35,7 @@ def test_recommend_returns_songs_sorted_by_score():
         favorite_genre="pop",
         favorite_mood="happy",
         target_energy=0.8,
-        likes_acoustic=False,
+        acoustic_preference=0.0,
     )
     rec = make_small_recommender()
     results = rec.recommend(user, k=2)
@@ -51,7 +51,7 @@ def test_explain_recommendation_returns_non_empty_string():
         favorite_genre="pop",
         favorite_mood="happy",
         target_energy=0.8,
-        likes_acoustic=False,
+        acoustic_preference=0.0,
     )
     rec = make_small_recommender()
     song = rec.songs[0]
@@ -66,7 +66,7 @@ def test_multi_preferences_with_partial_credit_affect_ranking():
         favorite_genre="hip hop",
         favorite_mood="confident",
         target_energy=0.8,
-        likes_acoustic=False,
+        acoustic_preference=0.0,
         preferred_genres=["hip hop", "lofi"],
         preferred_moods=["confident", "chill"],
     )
@@ -98,7 +98,7 @@ def test_exponential_decay_for_ranked_genres():
         favorite_genre="pop",
         favorite_mood="happy",
         target_energy=0.5,
-        likes_acoustic=False,
+        acoustic_preference=0.0,
         preferred_genres=["pop", "jazz", "rock", "blues", "classical"],
     )
     
@@ -127,7 +127,7 @@ def test_energy_closeness_scoring():
         favorite_genre="pop",
         favorite_mood="happy",
         target_energy=0.8,
-        likes_acoustic=False,
+        acoustic_preference=0.0,
     )
     
     results = rec.recommend(user, k=3)
@@ -138,8 +138,8 @@ def test_energy_closeness_scoring():
     assert results[2].energy == 0.2
 
 
-def test_acoustic_preference_boolean_matching():
-    """Verify that acoustic preference matching works with boolean preference."""
+def test_acoustic_preference_spectrum_matching():
+    """Verify that acoustic preference matching works across the preference spectrum."""
     acoustic_song = Song(
         id=1, title="Acoustic Track", artist="Artist", genre="folk", mood="peaceful",
         energy=0.3, tempo_bpm=80, valence=0.5, danceability=0.3, acousticness=0.95,
@@ -155,7 +155,7 @@ def test_acoustic_preference_boolean_matching():
         favorite_genre="folk",
         favorite_mood="peaceful",
         target_energy=0.3,
-        likes_acoustic=True,
+        acoustic_preference=1.0,
     )
     results_acoustic = rec.recommend(acoustic_lover, k=2)
     assert results_acoustic[0].title == "Acoustic Track"
@@ -165,10 +165,20 @@ def test_acoustic_preference_boolean_matching():
         favorite_genre="pop",
         favorite_mood="happy",
         target_energy=0.7,
-        likes_acoustic=False,
+        acoustic_preference=0.0,
     )
     results_electric = rec.recommend(electric_lover, k=2)
     assert results_electric[0].title == "Electric Track"
+
+    # User with mid preference should prefer the closer acousticness value.
+    balanced_user = UserProfile(
+        favorite_genre="pop",
+        favorite_mood="happy",
+        target_energy=0.6,
+        acoustic_preference=0.5,
+    )
+    results_balanced = rec.recommend(balanced_user, k=2)
+    assert results_balanced[0].title == "Electric Track"
 
 
 def test_genre_substring_matching():
@@ -186,7 +196,7 @@ def test_genre_substring_matching():
         favorite_genre="pop",
         favorite_mood="happy",
         target_energy=0.6,
-        likes_acoustic=False,
+        acoustic_preference=0.0,
     )
     
     results = rec.recommend(user, k=2)
@@ -208,7 +218,7 @@ def test_no_matching_genre_still_scores_other_features():
         favorite_genre="rock",
         favorite_mood="peaceful",
         target_energy=0.3,
-        likes_acoustic=True,
+        acoustic_preference=1.0,
     )
     
     results = rec.recommend(user, k=2)
@@ -223,7 +233,7 @@ def test_explanation_includes_matching_features():
         favorite_genre="pop",
         favorite_mood="happy",
         target_energy=0.8,
-        likes_acoustic=False,
+        acoustic_preference=0.0,
     )
     rec = make_small_recommender()
     song = rec.songs[0]  # "Test Pop Track" - matches genre, mood, energy, acoustic
@@ -248,7 +258,7 @@ def test_recommend_respects_k_parameter():
         favorite_genre="pop",
         favorite_mood="happy",
         target_energy=0.5,
-        likes_acoustic=False,
+        acoustic_preference=0.0,
     )
     
     # Test different k values
@@ -277,7 +287,7 @@ def test_conflicting_preferences_with_ranked_backup():
         favorite_genre="jazz",  # Not in catalog
         favorite_mood="peaceful",
         target_energy=0.9,
-        likes_acoustic=True,
+        acoustic_preference=1.0,
         preferred_genres=["jazz", "classical"],
     )
     
@@ -292,7 +302,7 @@ def test_empty_ranked_preferences():
         favorite_genre="pop",
         favorite_mood="happy",
         target_energy=0.5,
-        likes_acoustic=False,
+        acoustic_preference=0.0,
         preferred_genres=[],  # Empty list
         preferred_moods=[],   # Empty list
     )
@@ -310,7 +320,7 @@ def test_score_consistency_across_calls():
         favorite_genre="pop",
         favorite_mood="happy",
         target_energy=0.8,
-        likes_acoustic=False,
+        acoustic_preference=0.0,
     )
     rec = make_small_recommender()
     song = rec.songs[0]

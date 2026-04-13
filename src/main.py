@@ -20,7 +20,7 @@ HIGH_ENERGY_POP = {
     "genres": ["pop", "funk", "indie pop"],
     "moods": ["happy", "playful", "confident"],
     "energy": 0.80,
-    "likes_acoustic": False,
+    "acoustic_preference": 0.1,
 }
 
 CHILL_LOFI = {
@@ -29,7 +29,7 @@ CHILL_LOFI = {
     "genres": ["lofi", "ambient"],
     "moods": ["chill", "focused", "peaceful"],
     "energy": 0.35,
-    "likes_acoustic": True,
+    "acoustic_preference": 0.9,
 }
 
 DEEP_INTENSE_ROCK = {
@@ -38,7 +38,7 @@ DEEP_INTENSE_ROCK = {
     "genres": ["rock", "metal", "hip hop"],
     "moods": ["intense", "aggressive", "confident"],
     "energy": 0.90,
-    "likes_acoustic": False,
+    "acoustic_preference": 0.05,
 }
 
 # Edge case / adversarial profiles designed to stress-test the scoring logic.
@@ -49,7 +49,7 @@ CONFLICTING_VIBE = {
     "genres": ["blues", "jazz"],
     "moods": ["melancholic", "moody"],
     "energy": 0.90,  # Very high energy but melancholic mood—direct conflict
-    "likes_acoustic": True,
+    "acoustic_preference": 0.9,
 }
 
 ULTRA_CHILL = {
@@ -58,7 +58,7 @@ ULTRA_CHILL = {
     "genres": ["ambient", "classical"],
     "moods": ["peaceful", "relaxed"],
     "energy": 0.10,  # Extremely low energy boundary
-    "likes_acoustic": True,
+    "acoustic_preference": 0.95,
 }
 
 PURE_ADRENALINE = {
@@ -67,7 +67,7 @@ PURE_ADRENALINE = {
     "genres": ["edm", "metal", "rock"],
     "moods": ["euphoric", "aggressive"],
     "energy": 0.98,  # Extremely high energy boundary
-    "likes_acoustic": False,
+    "acoustic_preference": 0.0,
 }
 
 ACOUSTIC_ROCKER = {
@@ -76,7 +76,7 @@ ACOUSTIC_ROCKER = {
     "genres": ["rock", "metal"],
     "moods": ["intense", "aggressive"],
     "energy": 0.85,
-    "likes_acoustic": True,  # Unusual: rock fans rarely want acoustic
+    "acoustic_preference": 0.8,  # Unusual: rock fans rarely want acoustic
 }
 
 EVERYTHING_GOES = {
@@ -85,7 +85,7 @@ EVERYTHING_GOES = {
     "genres": ["pop", "rock", "lofi", "jazz", "edm", "classical"],  # No clear hierarchy
     "moods": ["happy", "intense", "chill", "moody", "peaceful"],
     "energy": 0.50,  # Middle ground
-    "likes_acoustic": False,
+    "acoustic_preference": 0.4,
 }
 
 

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 # Additive point values — scores are NOT normalized to [0, 1].
 # Design rationale:
 #   Genre is a hard long-term preference (2.0 pts); mood is contextual and
-#   situational, so it counts half as much (1.0 pt).  Energy and acousticness
+#   situational, so it counts half as much (1.0 pt). Energy and acousticness
 #   are continuous signals scored by closeness, giving songs that nail the
 #   numeric feel a meaningful boost without overriding categorical matches.
 #   Max possible score: 2.0 + 1.0 + 1.0 + 1.0 = 5.0
@@ -110,12 +110,14 @@ def _score_song(song: Song, user: UserProfile) -> Tuple[float, Dict[str, float],
 
     genre_match = _ranked_match(song.genre, _genre_preferences(user))
     mood_match = _ranked_match(song.mood, _mood_preferences(user))
-    acoustic_target = 1.0 if user.likes_acoustic else 0.0
 
     contributions["genre"] = FEATURE_WEIGHTS["genre"] * genre_match
     contributions["mood"] = FEATURE_WEIGHTS["mood"] * mood_match
     contributions["energy"] = FEATURE_WEIGHTS["energy"] * _closeness(user.target_energy, song.energy)
-    contributions["acousticness"] = FEATURE_WEIGHTS["acousticness"] * _closeness(acoustic_target, song.acousticness)
+    contributions["acousticness"] = FEATURE_WEIGHTS["acousticness"] * _closeness(
+        user.acoustic_preference,
+        song.acousticness,
+    )
 
     if contributions["genre"] > 0:
         reasons.append(f"genre match (+{contributions['genre']:.2f})")
@@ -155,12 +157,13 @@ def _build_explanation(song: Song, user: UserProfile, contributions: Dict[str, f
     if _closeness(user.target_energy, song.energy) >= 0.8:
         reasons.append("has an energy level close to your target")
 
-    acoustic_target = 1.0 if user.likes_acoustic else 0.0
-    if _closeness(acoustic_target, song.acousticness) >= 0.8:
-        if user.likes_acoustic:
+    if _closeness(user.acoustic_preference, song.acousticness) >= 0.8:
+        if user.acoustic_preference >= 0.65:
             reasons.append("leans acoustic, which matches your preference")
-        else:
+        elif user.acoustic_preference <= 0.35:
             reasons.append("is less acoustic, which matches your preference")
+        else:
+            reasons.append("matches your balanced acoustic preference")
 
     if not reasons:
         top_factor = max(contributions, key=contributions.get)
@@ -205,7 +208,8 @@ class UserProfile:
         favorite_genre: The user's top genre preference.
         favorite_mood: The user's top mood preference.
         target_energy: Ideal energy level the user wants, 0.0 to 1.0.
-        likes_acoustic: True if the user prefers acoustic tracks, False otherwise.
+        acoustic_preference: Preferred acousticness from 0.0 to 1.0.
+            0.0 means strongly non-acoustic, 1.0 means strongly acoustic.
         preferred_genres: Optional ordered list of genres (most to least preferred).
             Falls back to [favorite_genre] when not provided.
         preferred_moods: Optional ordered list of moods (most to least preferred).
@@ -214,7 +218,7 @@ class UserProfile:
     favorite_genre: str
     favorite_mood: str
     target_energy: float
-    likes_acoustic: bool
+    acoustic_preference: float = 0.5
     preferred_genres: Optional[List[str]] = None
     preferred_moods: Optional[List[str]] = None
 
@@ -299,7 +303,8 @@ def recommend_songs(user_prefs: Dict, songs: List[Dict], k: int = 5) -> List[Tup
 
     Args:
         user_prefs: Dict of user preference keys — "genre", "mood", "energy",
-            "likes_acoustic", and optionally "genres" and "moods" for ranked lists.
+            "acoustic_preference" (0.0-1.0), and optionally "genres" and "moods"
+            for ranked lists. Legacy "likes_acoustic" is still accepted.
         songs: List of song dicts as returned by load_songs.
         k: Number of recommendations to return (default 5).
 
@@ -307,11 +312,17 @@ def recommend_songs(user_prefs: Dict, songs: List[Dict], k: int = 5) -> List[Tup
         A list of up to k tuples of (song_dict, score, explanation, reasons),
         sorted highest score first.
     """
+    legacy_likes_acoustic = bool(user_prefs.get("likes_acoustic", False))
+    acoustic_pref = user_prefs.get(
+        "acoustic_preference",
+        1.0 if legacy_likes_acoustic else 0.0,
+    )
+
     user = UserProfile(
         favorite_genre=user_prefs.get("genre", ""),
         favorite_mood=user_prefs.get("mood", ""),
         target_energy=float(user_prefs.get("energy", 0.5)),
-        likes_acoustic=bool(user_prefs.get("likes_acoustic", False)),
+        acoustic_preference=float(acoustic_pref),
         preferred_genres=user_prefs.get("genres"),
         preferred_moods=user_prefs.get("moods"),
     )
