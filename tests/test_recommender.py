@@ -42,7 +42,7 @@ def test_recommend_returns_songs_sorted_by_score():
     results = rec.recommend(user, k=2)
 
     assert len(results) == 2
-    # Starter expectation: the pop, happy, high energy song should score higher
+    # Basic expectation: the pop, happy, high energy song should score higher
     assert results[0].genre == "pop"
     assert results[0].mood == "happy"
 
@@ -551,3 +551,98 @@ def test_explanation_can_reference_new_optional_features():
 
     explanation = rec.explain_recommendation(user, song).lower()
     assert "danceability" in explanation or "positivity" in explanation
+
+
+def test_diversify_option_in_recommender_spreads_top_k_artists():
+    """Diversity reranking should avoid artist repetition when scores are close."""
+    songs = [
+        Song(id=1, title="A1", artist="Artist A", genre="pop", mood="happy",
+             energy=0.60, tempo_bpm=100, valence=0.60, danceability=0.70, acousticness=0.20),
+        Song(id=2, title="A2", artist="Artist A", genre="pop", mood="happy",
+             energy=0.59, tempo_bpm=100, valence=0.60, danceability=0.69, acousticness=0.21),
+           Song(id=3, title="B1", artist="Artist B", genre="pop", mood="happy",
+             energy=0.58, tempo_bpm=100, valence=0.60, danceability=0.68, acousticness=0.20),
+    ]
+    rec = Recommender(songs)
+    user = UserProfile(
+        favorite_genre="pop",
+        favorite_mood="happy",
+        target_energy=0.60,
+        energy_flexibility=1.0,
+        acoustic_preference=0.20,
+    )
+
+    baseline = rec.recommend(user, k=2)
+    diversified = rec.recommend(user, k=2, diversify=True, artist_penalty=0.35, genre_penalty=0.15)
+
+    assert baseline[0].artist == "Artist A"
+    assert baseline[1].artist == "Artist A"
+    assert diversified[0].artist != diversified[1].artist
+
+
+def test_diversify_option_in_functional_api_can_reduce_repeat_genres():
+    """Functional API should apply genre/artist repeat penalties when enabled."""
+    from src.recommender import recommend_songs
+
+    songs = [
+        {
+            "id": "1",
+            "title": "Pop 1",
+            "artist": "Artist A",
+            "genre": "pop",
+            "mood": "happy",
+            "energy": 0.60,
+            "tempo_bpm": 100,
+            "valence": 0.60,
+            "danceability": 0.70,
+            "acousticness": 0.20,
+        },
+        {
+            "id": "2",
+            "title": "Pop 2",
+            "artist": "Artist B",
+            "genre": "pop",
+            "mood": "happy",
+            "energy": 0.59,
+            "tempo_bpm": 100,
+            "valence": 0.60,
+            "danceability": 0.69,
+            "acousticness": 0.20,
+        },
+        {
+            "id": "3",
+            "title": "Rock 1",
+            "artist": "Artist C",
+            "genre": "rock",
+            "mood": "happy",
+            "energy": 0.58,
+            "tempo_bpm": 100,
+            "valence": 0.60,
+            "danceability": 0.68,
+            "acousticness": 0.20,
+        },
+    ]
+    user_base = {
+        "genre": "pop",
+        "mood": "happy",
+        "genres": ["pop", "rock"],
+        "energy": 0.60,
+        "energy_flexibility": 1.0,
+        "acoustic_preference": 0.20,
+    }
+
+    baseline = recommend_songs(user_base, songs, k=2)
+    diversified = recommend_songs(
+        {
+            **user_base,
+            "diversify": True,
+            "artist_repeat_penalty": 0.35,
+                "genre_repeat_penalty": 0.60,
+        },
+        songs,
+        k=2,
+    )
+
+    assert baseline[0][0]["genre"] == "pop"
+    assert baseline[1][0]["genre"] == "pop"
+    assert diversified[0][0]["genre"] != diversified[1][0]["genre"]

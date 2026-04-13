@@ -101,6 +101,9 @@ EVERYTHING_GOES = {
     "acoustic_preference": 0.4,
     "target_danceability": 0.6,
     "target_valence": 0.6,
+    "diversify": True,
+    "artist_repeat_penalty": 0.35,
+    "genre_repeat_penalty": 0.15,
 }
 
 

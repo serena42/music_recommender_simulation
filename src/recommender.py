@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import List, Dict, Tuple, Optional
 from dataclasses import dataclass
+from collections import Counter
 
 
 # Additive point values — scores are NOT normalized to [0, 1].
@@ -217,6 +218,52 @@ def _build_explanation(song: Song, user: UserProfile, contributions: Dict[str, f
 
     return "; ".join(reasons)
 
+
+def _diversity_rerank(
+    scored: List[Tuple[Song, float]],
+    k: int,
+    artist_penalty: float,
+    genre_penalty: float,
+) -> List[Tuple[Song, float]]:
+    """Greedily rerank top-k with repeat penalties for artist and genre.
+
+    Each selection step adjusts a candidate's score by subtracting:
+        artist_penalty * prior_occurrences_of_artist
+        genre_penalty * prior_occurrences_of_genre
+
+    This nudges the list toward variety when base scores are close.
+    """
+    if k <= 0:
+        return []
+
+    remaining = list(scored)
+    selected: List[Tuple[Song, float]] = []
+    artist_counts: Counter[str] = Counter()
+    genre_counts: Counter[str] = Counter()
+
+    while remaining and len(selected) < k:
+        best_idx = 0
+        best_adjusted = float("-inf")
+        best_base = float("-inf")
+
+        for idx, (song, base_score) in enumerate(remaining):
+            adjusted = (
+                base_score
+                - (artist_penalty * artist_counts[song.artist])
+                - (genre_penalty * genre_counts[song.genre])
+            )
+            if adjusted > best_adjusted or (adjusted == best_adjusted and base_score > best_base):
+                best_idx = idx
+                best_adjusted = adjusted
+                best_base = base_score
+
+        chosen_song, chosen_base = remaining.pop(best_idx)
+        selected.append((chosen_song, chosen_base))
+        artist_counts[chosen_song.artist] += 1
+        genre_counts[chosen_song.genre] += 1
+
+    return selected
+
 @dataclass
 class Song:
     """A single song and its audio feature attributes loaded from the catalog.
@@ -289,7 +336,14 @@ class Recommender:
         """
         self.songs = songs
 
-    def recommend(self, user: UserProfile, k: int = 5) -> List[Song]:
+    def recommend(
+        self,
+        user: UserProfile,
+        k: int = 5,
+        diversify: bool = False,
+        artist_penalty: float = 0.35,
+        genre_penalty: float = 0.15,
+    ) -> List[Song]:
         """Return the top k songs ranked by score for the given user.
 
         Args:
@@ -297,7 +351,9 @@ class Recommender:
             k: Number of results to return (default 5).
 
         Returns:
-            A list of up to k Song objects sorted highest score first.
+            A list of up to k Song objects. By default these are sorted by
+            highest base score; when diversify=True, a greedy diversity-aware
+            reranking is applied.
         """
         scored: List[Tuple[Song, float]] = []
         for song in self.songs:
@@ -305,6 +361,9 @@ class Recommender:
             scored.append((song, score))
 
         scored.sort(key=lambda item: item[1], reverse=True)
+        if diversify:
+            reranked = _diversity_rerank(scored, k=k, artist_penalty=artist_penalty, genre_penalty=genre_penalty)
+            return [song for song, _ in reranked]
         return [song for song, _ in scored[:k]]
 
     def explain_recommendation(self, user: UserProfile, song: Song) -> str:
@@ -346,7 +405,7 @@ def load_songs(csv_path: str) -> List[Dict]:
             songs.append(row)
     return songs
 
-def recommend_songs(user_prefs: Dict, songs: List[Dict], k: int = 5) -> List[Tuple[Dict, float, str]]:
+def recommend_songs(user_prefs: Dict, songs: List[Dict], k: int = 5) -> List[Tuple[Dict, float, str, List[str]]]:
     """Score every song in the catalog and return the top k results.
 
     Converts raw dicts (from load_songs) into typed Song and UserProfile
@@ -357,6 +416,8 @@ def recommend_songs(user_prefs: Dict, songs: List[Dict], k: int = 5) -> List[Tup
         user_prefs: Dict of user preference keys — "genre", "mood", "energy",
             "energy_flexibility" (0.0-1.0), "acoustic_preference" (0.0-1.0),
             optional "target_danceability" and "target_valence",
+            optional "diversify" bool with "artist_repeat_penalty" and
+            "genre_repeat_penalty" tuning values,
             and optionally "genres" and "moods" for ranked lists.
             Legacy "likes_acoustic" is still accepted.
         songs: List of song dicts as returned by load_songs.
@@ -392,7 +453,7 @@ def recommend_songs(user_prefs: Dict, songs: List[Dict], k: int = 5) -> List[Tup
         preferred_moods=user_prefs.get("moods"),
     )
 
-    scored: List[Tuple[Dict, float, str]] = []
+    scored: List[Tuple[Dict, float, str, List[str]]] = []
     for song_dict in songs:
         song = Song(
             id=int(song_dict["id"]),
@@ -411,4 +472,39 @@ def recommend_songs(user_prefs: Dict, songs: List[Dict], k: int = 5) -> List[Tup
         explanation = _build_explanation(song, user, contributions)
         scored.append((song_dict, score, explanation, reasons))
 
-    return sorted(scored, key=lambda item: item[1], reverse=True)[:k]
+    sorted_scored = sorted(scored, key=lambda item: item[1], reverse=True)
+
+    diversify = bool(user_prefs.get("diversify", False))
+    if not diversify:
+        return sorted_scored[:k]
+
+    artist_penalty = float(user_prefs.get("artist_repeat_penalty", 0.35))
+    genre_penalty = float(user_prefs.get("genre_repeat_penalty", 0.15))
+
+    selected: List[Tuple[Dict, float, str, List[str]]] = []
+    remaining = list(sorted_scored)
+    artist_counts: Counter[str] = Counter()
+    genre_counts: Counter[str] = Counter()
+
+    while remaining and len(selected) < k:
+        best_idx = 0
+        best_adjusted = float("-inf")
+        best_base = float("-inf")
+
+        for idx, (song_dict, base_score, _, _) in enumerate(remaining):
+            adjusted = (
+                base_score
+                - (artist_penalty * artist_counts[song_dict["artist"]])
+                - (genre_penalty * genre_counts[song_dict["genre"]])
+            )
+            if adjusted > best_adjusted or (adjusted == best_adjusted and base_score > best_base):
+                best_idx = idx
+                best_adjusted = adjusted
+                best_base = base_score
+
+        chosen_song, chosen_base, chosen_explanation, chosen_reasons = remaining.pop(best_idx)
+        selected.append((chosen_song, chosen_base, chosen_explanation, chosen_reasons))
+        artist_counts[chosen_song["artist"]] += 1
+        genre_counts[chosen_song["genre"]] += 1
+
+    return selected

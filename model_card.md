@@ -2,40 +2,58 @@
 
 ## 1. Model Name  
 
-This is MY Jam 1.0
+MoodyClues 1.0
 
 ---
 
 ## 2. Intended Use  
 
-Describe what your recommender is designed to do and who it is for. 
+This is an exploratory music recommender system built to help a user understand how more complex recommendation systems work. It generates simple content-based recommendations (songs that are similar in genre, mood, energy, acousticness, and optional danceability/valence targets) and explains why each song was chosen.
 
-Prompts:  
+It assumes the user can provide a few clear preferences up front, such as favorite genre, mood, and target energy. It does not learn from long-term behavior like listens, skips, or playlist history.
 
-- What kind of recommendations does it generate  
-- What assumptions does it make about the user  
-- Is this for real users or classroom exploration  
+This project is mainly for classroom exploration and model transparency, not for production use.
 
 ---
 
 ## 3. How the Model Works  
 
-Explain your scoring approach in simple language.  
+This recommender compares each song to a user's taste profile and gives the song a score.
 
-Prompts:  
+The song features it uses are:
 
-- What features of each song are used (genre, energy, mood, etc.)  
-- What user preferences are considered  
-- How does the model turn those into a score  
-- What changes did you make from the starter logic  
+- genre
+- mood
+- energy
+- acousticness
+- optional danceability
+- optional valence (positivity)
 
-Avoid code here. Pretend you are explaining the idea to a friend who does not program.
+The user preferences it considers are:
 
-Algorithm recipe: this recommender uses additive point scoring and ranking. Each song earns raw points across core features: a genre match is worth up to 2.0 points, a mood match up to 1.0 point, energy closeness up to 1.0 point, and acousticness closeness up to 1.0 point, for a core maximum score of 5.0. Genre and mood use ranked partial credit with exponential decay (1.0, 0.8, 0.64, 0.51, ...), so secondary preferences continue to matter. Energy and acousticness use a closeness function — the nearer the song's value is to the user's target, the more points it earns. Energy closeness now supports a user-specific flexibility control (`energy_flexibility`), which widens or narrows the accepted energy range. Acoustic preference is modeled as a spectrum from 0.0 (prefers less acoustic) to 1.0 (prefers more acoustic), not a binary flag. The model also supports optional tie-breaker signals: danceability (up to +0.2) and valence (up to +0.1) when the user provides those targets. Contributions are summed into one total score, songs are sorted highest to lowest, and the top k results are returned with short explanations of the strongest matched factors.
+- favorite and ranked genres
+- favorite and ranked moods
+- target energy plus how strict/flexible energy matching should be
+- acoustic preference on a spectrum (not just yes/no)
+- optional danceability and valence targets
 
-Weighting rationale: genre counts twice as much as mood (2.0 vs 1.0) because genre is a strong long-term taste signal — most listeners have hard genre preferences — while mood is contextual and shifts with situation. Energy and acousticness are continuous signals that serve as meaningful tiebreakers between songs that already match on genre and mood.
+How scoring works in plain language:
 
-Potential biases: because genre carries 2.0 points and mood only 1.0, a song that perfectly matches the user's mood but sits in the wrong genre will always rank below a genre-matching song — even if the mood fit is strong. This means the system may over-prioritize genre and surface familiar-sounding songs over ones that would actually feel right in the moment. Also, danceability and valence are intentionally low-weight tie-breakers, so they improve nuance but may still be too weak for users who consider those attributes primary.
+- Songs get points for matching genre and mood.
+- Songs also get points when their energy and acoustic feel are close to what the user asked for.
+- If the user provides danceability or valence targets, those add small bonus points as tie-breakers.
+- After each song gets a total score, songs are sorted from highest to lowest and the top results are shown with an explanation.
+
+What changed from the starter logic:
+
+- Moved from simpler matching to additive weighted scoring.
+- Added ranked preferences so second/third choices still matter.
+- Replaced binary acoustic preference with a 0-1 spectrum.
+- Added energy flexibility so users can be strict or broad about energy.
+- Added optional danceability and valence tie-breakers.
+- Added optional diversity-aware reranking for top-k to reduce repeated artists/genres.
+
+Weighting rationale: genre counts more than mood because genre is usually a stronger long-term preference, while mood is more situational. Energy and acousticness help separate songs that might look similar on genre/mood alone.
 
 Data flow:
 
@@ -62,26 +80,41 @@ flowchart TD
 
 ## 4. Data  
 
-Describe the dataset the model uses.  
+The recommender uses a small catalog of 18 songs stored in `data/songs.csv`.
 
-Prompts:  
+Each song includes:
 
-- How many songs are in the catalog  
-- What genres or moods are represented  
-- Did you add or remove data  
-- Are there parts of musical taste missing in the dataset  
+- basic metadata (title, artist, genre, mood)
+- numeric audio-style attributes (energy, tempo, valence, danceability, acousticness)
+
+The catalog includes a mix of genres and moods, such as pop, lofi, rock, ambient, jazz, synthwave, classical, hip hop, metal, reggae, country, edm, blues, and funk, plus moods like happy, chill, intense, focused, confident, peaceful, aggressive, euphoric, melancholic, and playful.
+
+I expanded the catalog during development to improve variety and reduce obvious overfitting to only a few genres.
+
+What is still missing:
+
+- behavior data (likes, skips, repeat plays, playlist history)
+- broader catalog scale (18 songs is intentionally small for classroom exploration)
+- context signals (time of day, activity, recent listening session)
 
 ---
 
 ## 5. Strengths  
 
-Where does your system seem to work well  
+This system works best for users who can describe what they want right now in clear terms (genre, mood, energy, and acoustic feel).
 
-Prompts:  
+Where it performs well:
 
-- User types for which it gives reasonable results  
-- Any patterns you think your scoring captures correctly  
-- Cases where the recommendations matched your intuition  
+- It responds clearly to profile changes. High-Energy Pop, Chill Lofi, and Pure Adrenaline produce noticeably different top results.
+- It handles ranked preferences better than a strict one-label approach, so second/third choices can still show up.
+- It gives transparent explanations, which makes it easy to understand why songs were recommended.
+- It supports nuanced controls (acoustic spectrum, energy flexibility, optional danceability/valence) without making the system hard to interpret.
+
+Patterns that matched intuition:
+
+- Chill profiles surface calmer, more acoustic songs.
+- High-energy profiles consistently surface faster, more intense songs.
+- "Gym Hero" appears often for upbeat users because it matches strong numeric signals (high energy, low acousticness, high danceability), even when mood is not the absolute best match.
 
 ---
 
@@ -140,12 +173,15 @@ Ranked preferences now decay exponentially: `0.8 ** idx`.
 
 Effect: secondary preferences retain meaningful influence without an abrupt floor, reducing over-concentration on only top-ranked tastes.
 
-**5. No Serendipity or Diversity Mechanism (MEDIUM severity)**
+**5. No Serendipity or Diversity Mechanism (MEDIUM severity) — MITIGATED**
 
-The algorithm is greedy—it returns the highest-scoring songs every time.
+Status: implemented in the current codebase (Challenge 3 rollout).
 
-- Top-5 will likely cluster around the same genre, mood, and narrow energy band.
-- **Effect:** Users never discover new artists or styles, only deeper dives into what they already know. Perfect filter bubble reinforcement.
+The algorithm now supports optional diversity-aware reranking after base scoring.
+
+- During top-k selection, candidates receive repeat penalties based on how many already-selected songs share the same artist or genre.
+- Default penalties: artist = 0.35, genre = 0.15.
+- **Effect:** close-score results become more varied, reducing artist/genre clustering while preserving relevance-first behavior.
 
 **6. Missing Continuous Features (MEDIUM severity) — PARTIALLY MITIGATED**
 
@@ -162,11 +198,13 @@ Residual gap: tempo (BPM) is still not scored.
 
 ### Suggested Fixes and Implementation Status
 
-**Fix #1: Reduce Genre Weight & Add Diversity Penalty (addresses Filter Bubble #1 & #5)**
+**Fix #1: Reduce Genre Weight & Add Diversity Penalty (addresses Filter Bubble #1 & #5) — PARTIALLY COMPLETED**
 
 Change weights from (genre=2.0, mood=1.0, energy=1.0, acoustic=1.0) to (genre=1.0, mood=1.0, energy=1.0, acoustic=1.0).
 
 Then add a diversity penalty to top-k selection: once a song is recommended, reduce the score of songs with the same genre by 0.3 × remaining_points. This encourages the top-5 to be more varied while still respecting preferences.
+
+Current status: diversity reranking is implemented with configurable artist/genre repeat penalties. Genre weight is still 2.0 and remains future tuning work.
 
 **Fix #2: Replace Boolean Acoustic with Spectrum (addresses Filter Bubble #2) — COMPLETED**
 
@@ -194,9 +232,13 @@ Change the decay formula from `1.0 - (0.2 * idx)` to `0.8 ** idx` (exponential d
 
 No hard floor; even distant preferences contribute meaningfully.
 
-**Fix #5: Add a Diversity Bonus to Top-K Selection (addresses Filter Bubble #5)**
+**Fix #5: Add a Diversity Bonus to Top-K Selection (addresses Filter Bubble #5) — COMPLETED**
 
-Rerank top-k after scoring: once a song enters the top-5, penalize the remaining songs if they share genre/mood with any already-selected song. Use a small penalty (~0.1 points per shared dimension) to encourage variety without breaking overall preference ordering.
+Reranking is now implemented as a greedy top-k selection pass after base scoring. At each step, remaining songs are adjusted with repeat penalties for already-selected artist and genre matches.
+
+- adjusted score = base score - (artist_penalty x artist_repeat_count) - (genre_penalty x genre_repeat_count)
+- defaults: artist_penalty = 0.35, genre_penalty = 0.15
+- configurable through `diversify`, `artist_repeat_penalty`, and `genre_repeat_penalty`
 
 **Fix #6: Score Danceability and Valence (addresses Filter Bubble #6) — COMPLETED**
 
@@ -210,16 +252,38 @@ Assign small weights (0.2 and 0.1) so they're tie-breakers, not dominant.
 
 ## 7. Evaluation  
 
-How you checked whether the recommender behaved as expected. 
+I tested eight user profiles end-to-end:
 
-Prompts:  
+- High-Energy Pop
+- Chill Lofi
+- Deep Intense Rock
+- Conflicting Vibe (high energy + melancholic)
+- Ultra Chill (very low energy)
+- Pure Adrenaline (very high energy)
+- Acoustic Rocker (unusual combo)
+- Everything Goes (broad preferences)
 
-- Which user profiles you tested  
-- What you looked for in the recommendations  
-- What surprised you  
-- Any simple tests or comparisons you ran  
+What I looked for:
 
-No need for numeric metrics unless you created some.
+- Do top songs shift when energy, acoustic preference, and mood change?
+- Do unusual profiles produce different results instead of copying one "default" list?
+- Do optional danceability/valence preferences act as tie-breakers instead of dominating?
+
+What surprised me:
+
+- "Gym Hero" appears for multiple profiles, including Happy Pop users, because it is high energy, low acoustic, and fairly danceable. Even when mood is not a perfect match, those numeric features keep it competitive.
+- The "Everything Goes" profile still leans toward pop/indie-pop near the top. That makes sense because genre still has the biggest weight, so broad users are not fully random.
+- "Acoustic Rocker" shows why mixed preferences are hard: rock/metal songs can still win even when acoustic preference is high, because strong genre and mood matches carry a lot of weight.
+- With diversity reranking enabled, broad profiles show fewer repeated artists/genres in top-k when song scores are close.
+
+Simple checks I ran:
+
+- Compared top-5 outputs across all profile pairs to verify that each profile meaningfully changes recommendations.
+- Used targeted tests to verify that energy flexibility reduces penalty on farther energy values.
+- Used targeted tests to verify that danceability/valence only affect ranking when explicitly provided.
+- Added targeted tests that verify diversity reranking can reduce repeated artists/genres in close-score scenarios.
+
+Scope note: this is a larger effort than the minimum assignment. In addition to the baseline recommender, it includes four implemented bias-mitigation upgrades and expanded automated test coverage.
 
 ---
 
@@ -233,7 +297,7 @@ Ideas for how you would improve the model next.
 - ✅ Replaced boolean acoustic preference with a spectrum (0.0–1.0), removing the hard filter.
 - ✅ Added user energy flexibility so contextual energy preferences are supported.
 - ✅ Scored missing features (danceability, valence) for users who care about them.
-- Implement diversity penalty in top-k selection to reduce genre/mood clustering.
+- Tune the diversity penalty values and trigger conditions using user feedback.
 
 **Medium-term enhancements:**
 
@@ -246,12 +310,10 @@ Ideas for how you would improve the model next.
 
 ## 9. Personal Reflection  
 
-A few sentences about your experience.  
+My biggest learning moment was realizing that recommendation quality is mostly about careful weighting, not complexity. When I changed the scoring rules (for example, ranked-preference decay and acoustic preference handling), the top songs changed immediately. That made it clear that even a simple model can strongly shape what a user hears.
 
-Prompts:  
+Using AI tools helped me move faster when brainstorming fixes, drafting tests, and documenting tradeoffs. The biggest value was speed in exploring options. The moments I had to double-check were numerical assumptions and behavior claims. I repeatedly verified those with real profile runs and pytest results so I did not trust generated ideas blindly.
 
-- What you learned about recommender systems  
-- Something unexpected or interesting you discovered  
-- How this changed the way you think about music recommendation apps  
+What surprised me most is how "real" the recommendations can feel even with a straightforward additive scoring algorithm. Songs like "Gym Hero" kept showing up for upbeat users, which initially looked suspicious. After checking the factors, it made sense: high energy, low acousticness, and strong danceability gave it a strong overall fit.
 
-I asked Claude to help design a math-based scoring rule for my music recommender, and we chose a closeness approach for numeric features so songs score higher when they are nearer to the user’s target values, not simply higher or lower overall. For example, a song with energy very close to the user’s preferred energy gets more points than songs far above or below that target. We then combined numeric closeness with categorical matches (genre and mood) using additive point values, which keeps the model simple and interpretable. After comparing approaches, we moved from a normalized weight system (all weights summing to 1.0) to an explicit point recipe: genre is worth 2.0 points, mood 1.0, energy up to 1.0, and acousticness up to 1.0. The 2-to-1 genre-to-mood ratio was a deliberate design choice — genre tends to be a hard filter for most listeners while mood shifts with context. This process helped me understand how recommendation systems turn user preferences into measurable rules and how weight choices directly shape the final ranking.
+If I extended this project next, I would tune diversity penalties with user feedback, include tempo preferences as another optional feature, and run a small user study to compare perceived quality before and after diversity tuning.
