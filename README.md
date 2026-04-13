@@ -34,18 +34,14 @@ UserProfile features used in this simulation:
 
 ### Scoring Rule
 
-For each song, the recommender computes a weighted score from 0.0 to 1.0 using:
+For each song, the recommender computes an additive point score with a maximum of 5.0 using:
 
-- genre match: 0.30
-- mood match: 0.25
-- energy closeness to target: 0.20
-- acousticness closeness to preference: 0.15
-- tempo contribution: 0.05
-- danceability contribution: 0.03
-- valence contribution: 0.02
+- genre match: up to 2.0 pts
+- mood match: up to 1.0 pts
+- energy closeness to target: up to 1.0 pts
+- acousticness closeness to preference: up to 1.0 pts
 
-Genre and mood are exact matches (1 or 0). Numeric features use a closeness function, where songs
-closer to the target value get higher points.
+Genre and mood use partial credit for lower-ranked preferences and substring matching (so "indie pop" matches "pop"). Numeric features use a closeness function — the nearer a song's value is to the target, the more points it earns.
 
 For acousticness, the user preference is converted to a target:
 
@@ -98,6 +94,40 @@ pip install -r requirements.txt
 
 ```bash
 python -m src.main
+```
+
+### Sample Output
+
+```
+Loaded songs: 18
+
+             Top Recommendations
+---------------------------------------------
+ #1  Sunrise City                   4.75 / 5.00
+      * genre match (+2.00)
+      * mood match (+1.00)
+      * energy closeness (+0.93)
+      * acousticness closeness (+0.82)
+---------------------------------------------
+ #2  Rooftop Lights                 4.64 / 5.00
+      * genre match (+2.00)
+      * mood match (+1.00)
+      * energy closeness (+0.99)
+      * acousticness closeness (+0.65)
+---------------------------------------------
+ #3  Gym Hero                       3.77 / 5.00
+      * genre match (+2.00)
+      * energy closeness (+0.82)
+      * acousticness closeness (+0.95)
+---------------------------------------------
+ #4  City Cipher                    1.85 / 5.00
+      * energy closeness (+0.99)
+      * acousticness closeness (+0.86)
+---------------------------------------------
+ #5  Night Drive Loop               1.78 / 5.00
+      * energy closeness (+1.00)
+      * acousticness closeness (+0.78)
+---------------------------------------------
 ```
 
 ### Running Tests

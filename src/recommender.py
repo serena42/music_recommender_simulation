@@ -10,12 +10,12 @@ from dataclasses import dataclass
 #   situational, so it counts half as much (1.0 pt).  Energy and acousticness
 #   are continuous signals scored by closeness, giving songs that nail the
 #   numeric feel a meaningful boost without overriding categorical matches.
-#   Max possible score: 2.0 + 1.0 + 1.0 + 0.5 = 4.5
+#   Max possible score: 2.0 + 1.0 + 1.0 + 1.0 = 5.0
 FEATURE_WEIGHTS = {
     "genre": 2.0,
     "mood": 1.0,
     "energy": 1.0,
-    "acousticness": 0.5,
+    "acousticness": 1.0,
 }
 
 
@@ -28,7 +28,7 @@ def _closeness(target: float, value: float, max_range: float = 1.0) -> float:
 def _ranked_match(value: str, ordered_preferences: List[str]) -> float:
     """Returns partial credit based on preference rank for categorical values."""
     for idx, pref in enumerate(ordered_preferences):
-        if value == pref:
+        if value == pref or pref in value or value in pref:
             # First preference gets full credit, then gently decays.
             return max(0.4, 1.0 - (0.2 * idx))
     return 0.0
@@ -44,9 +44,10 @@ def _mood_preferences(user: UserProfile) -> List[str]:
     return [p for p in prefs if p]
 
 
-def _score_song(song: Song, user: UserProfile) -> Tuple[float, Dict[str, float]]:
-    """Scores a song and returns both total score and per-feature contributions."""
+def _score_song(song: Song, user: UserProfile) -> Tuple[float, Dict[str, float], List[str]]:
+    """Scores a song and returns total score, per-feature contributions, and reason strings."""
     contributions: Dict[str, float] = {}
+    reasons: List[str] = []
 
     genre_match = _ranked_match(song.genre, _genre_preferences(user))
     mood_match = _ranked_match(song.mood, _mood_preferences(user))
@@ -57,8 +58,17 @@ def _score_song(song: Song, user: UserProfile) -> Tuple[float, Dict[str, float]]
     contributions["energy"] = FEATURE_WEIGHTS["energy"] * _closeness(user.target_energy, song.energy)
     contributions["acousticness"] = FEATURE_WEIGHTS["acousticness"] * _closeness(acoustic_target, song.acousticness)
 
+    if contributions["genre"] > 0:
+        reasons.append(f"genre match (+{contributions['genre']:.2f})")
+    if contributions["mood"] > 0:
+        reasons.append(f"mood match (+{contributions['mood']:.2f})")
+    if contributions["energy"] > 0:
+        reasons.append(f"energy closeness (+{contributions['energy']:.2f})")
+    if contributions["acousticness"] > 0:
+        reasons.append(f"acousticness closeness (+{contributions['acousticness']:.2f})")
+
     total_score = sum(contributions.values())
-    return total_score, contributions
+    return total_score, contributions, reasons
 
 
 def _build_explanation(song: Song, user: UserProfile, contributions: Dict[str, float]) -> str:
@@ -127,14 +137,14 @@ class Recommender:
     def recommend(self, user: UserProfile, k: int = 5) -> List[Song]:
         scored: List[Tuple[Song, float]] = []
         for song in self.songs:
-            score, _ = _score_song(song, user)
+            score, _, _ = _score_song(song, user)
             scored.append((song, score))
 
         scored.sort(key=lambda item: item[1], reverse=True)
         return [song for song, _ in scored[:k]]
 
     def explain_recommendation(self, user: UserProfile, song: Song) -> str:
-        _, contributions = _score_song(song, user)
+        _, contributions, _ = _score_song(song, user)
         return _build_explanation(song, user, contributions)
 
 def load_songs(csv_path: str) -> List[Dict]:
@@ -184,9 +194,8 @@ def recommend_songs(user_prefs: Dict, songs: List[Dict], k: int = 5) -> List[Tup
             acousticness=float(song_dict["acousticness"]),
         )
 
-        score, contributions = _score_song(song, user)
+        score, contributions, reasons = _score_song(song, user)
         explanation = _build_explanation(song, user, contributions)
-        scored.append((song_dict, score, explanation))
+        scored.append((song_dict, score, explanation, reasons))
 
-    scored.sort(key=lambda item: item[1], reverse=True)
-    return scored[:k]
+    return sorted(scored, key=lambda item: item[1], reverse=True)[:k]

@@ -14,11 +14,11 @@ from src.recommender import load_songs, recommend_songs
 
 # Specific taste profile used for recommendation comparisons.
 TASTE_PROFILE = {
-    "genre": "hip hop",
-    "mood": "confident",
-    "genres": ["hip hop", "funk", "pop"],
-    "moods": ["confident", "playful", "happy"],
-    "energy": 0.78,
+    "genre": "pop",
+    "mood": "happy",
+    "genres": ["pop"],
+    "moods": ["happy"],
+    "energy": 0.75,
     "likes_acoustic": False,
 }
 
@@ -29,14 +29,15 @@ def main() -> None:
 
     recommendations = recommend_songs(TASTE_PROFILE, songs, k=5)
 
-    print("\nTop recommendations:\n")
-    for rec in recommendations:
-        # You decide the structure of each returned item.
-        # A common pattern is: (song, score, explanation)
-        song, score, explanation = rec
-        print(f"{song['title']} - Score: {score:.2f}")
-        print(f"Because: {explanation}")
-        print()
+    divider = "-" * 45
+    print(f"\n{'Top Recommendations':^45}")
+    print(divider)
+    for i, rec in enumerate(recommendations, start=1):
+        song, score, _, reasons = rec
+        print(f" #{i}  {song['title']:<30} {score:.2f} / 5.00")
+        for reason in reasons:
+            print(f"      * {reason}")
+        print(divider)
 
 
 if __name__ == "__main__":
