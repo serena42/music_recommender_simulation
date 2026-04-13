@@ -41,6 +41,53 @@ DEEP_INTENSE_ROCK = {
     "likes_acoustic": False,
 }
 
+# Edge case / adversarial profiles designed to stress-test the scoring logic.
+
+CONFLICTING_VIBE = {
+    "genre": "blues",
+    "mood": "melancholic",
+    "genres": ["blues", "jazz"],
+    "moods": ["melancholic", "moody"],
+    "energy": 0.90,  # Very high energy but melancholic mood—direct conflict
+    "likes_acoustic": True,
+}
+
+ULTRA_CHILL = {
+    "genre": "ambient",
+    "mood": "peaceful",
+    "genres": ["ambient", "classical"],
+    "moods": ["peaceful", "relaxed"],
+    "energy": 0.10,  # Extremely low energy boundary
+    "likes_acoustic": True,
+}
+
+PURE_ADRENALINE = {
+    "genre": "edm",
+    "mood": "euphoric",
+    "genres": ["edm", "metal", "rock"],
+    "moods": ["euphoric", "aggressive"],
+    "energy": 0.98,  # Extremely high energy boundary
+    "likes_acoustic": False,
+}
+
+ACOUSTIC_ROCKER = {
+    "genre": "rock",
+    "mood": "intense",
+    "genres": ["rock", "metal"],
+    "moods": ["intense", "aggressive"],
+    "energy": 0.85,
+    "likes_acoustic": True,  # Unusual: rock fans rarely want acoustic
+}
+
+EVERYTHING_GOES = {
+    "genre": "pop",
+    "mood": "happy",
+    "genres": ["pop", "rock", "lofi", "jazz", "edm", "classical"],  # No clear hierarchy
+    "moods": ["happy", "intense", "chill", "moody", "peaceful"],
+    "energy": 0.50,  # Middle ground
+    "likes_acoustic": False,
+}
+
 
 def main() -> None:
     songs = load_songs("data/songs.csv")
@@ -50,6 +97,11 @@ def main() -> None:
         ("High-Energy Pop", HIGH_ENERGY_POP),
         ("Chill Lofi", CHILL_LOFI),
         ("Deep Intense Rock", DEEP_INTENSE_ROCK),
+        ("Conflicting Vibe (High Energy + Sad)", CONFLICTING_VIBE),
+        ("Ultra Chill (Energy: 0.10)", ULTRA_CHILL),
+        ("Pure Adrenaline (Energy: 0.98)", PURE_ADRENALINE),
+        ("Acoustic Rocker (Unusual Combo)", ACOUSTIC_ROCKER),
+        ("Everything Goes (No Clear Hierarchy)", EVERYTHING_GOES),
     ]:
         recommendations = recommend_songs(profile, songs, k=5)
 

@@ -170,7 +170,42 @@ Example top recommendation: "Library Rain" (lofi, chill, 0.35 energy, 0.86 acous
 
 Example top recommendation: "Storm Runner" (rock, intense, 0.91 energy)
 
-These three profiles demonstrate the system's ability to differentiate between contrasting musical tastes. Run `python -m src.main` to see top-5 recommendations for each profile side-by-side.
+### Edge Case / Adversarial Profiles
+
+Five additional profiles stress-test the scoring logic with conflicting or boundary-value preferences:
+
+**Conflicting Vibe (High Energy + Sad)**
+- Energy: 0.90, Mood: melancholic
+- Tests: Does the system rank low-energy songs (that match mood) over high-energy songs (that match energy preference)?
+- Result: Genre and mood matches dominate; energy closeness is secondary. Blue Lantern (blues, low energy) scores higher than high-energy songs.
+
+**Ultra Chill (Energy: 0.10)**
+- Energy: 0.10 (boundary extreme)
+- Tests: Can the system handle very low energy targets without breaking?
+- Result: Golden Hour Strings (classical, 0.22 energy) scores highest. No numerical instability; scoring remains stable.
+
+**Pure Adrenaline (Energy: 0.98)**
+- Energy: 0.98 (boundary extreme)
+- Tests: Can the system handle very high energy targets?
+- Result: Laser Marathon (edm, 0.94 energy) scores highest. System handles high boundaries well.
+
+**Acoustic Rocker (Unusual Combo)**
+- Genre: rock, Acoustic preference: True
+- Tests: Do unusual preference combinations confuse the recommender?
+- Result: Storm Runner (rock, non-acoustic) scores highest because genre/mood/energy match outweigh the acoustic mismatch. System prioritizes primary preferences.
+
+**Everything Goes (No Clear Hierarchy)**
+- Genres: ["pop", "rock", "lofi", "jazz", "edm", "classical"] (all equally valued)
+- Tests: Do long preference lists cause all songs to score similarly?
+- Result: Primary genre (pop) still dominates. Detailed ranking emerges; system does not become indifferent.
+
+**Edge Case Conclusions:**
+- The scoring logic is robust to conflicting preferences; dimensionality/weighting prevents mutual cancellation.
+- Boundary energy values (0.10, 0.98) do not cause numerical instability.
+- Long preference lists still produce meaningful differentiation.
+- Primary (first-ranked) preferences carry more weight than secondary ones, so unusual combos do not "trick" the system.
+
+These three profiles demonstrate the system's ability to differentiate between contrasting musical tastes. Run `python -m src.main` to see top-5 recommendations for all eight profiles.
 
 ---
 
