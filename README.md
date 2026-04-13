@@ -2,32 +2,78 @@
 
 ## Project Summary
 
-In this project you will build and explain a small music recommender system.
-
-Your goal is to:
-
-- Represent songs and a user "taste profile" as data
-- Design a scoring rule that turns that data into recommendations
-- Evaluate what your system gets right and wrong
-- Reflect on how this mirrors real world AI recommenders
-
-Replace this paragraph with your own summary of what your version does.
+This project simulates a simple content-based music recommender. The system takes a user's preferred genre, mood, energy target, and acoustic preference, then ranks songs by a weighted similarity score. Recommendations include short explanations so each result is transparent and easy to understand.
 
 ---
 
 ## How The System Works
 
-Explain your design in plain language.
+Real-world recommendation systems usually combine multiple signal types: content signals (genre, tempo, mood), behavior signals (likes, skips, watch/listen time), and collaborative patterns across many users. This simulation focuses on transparent, content-based matching, so it prioritizes how well a song's attributes match one user's stated preferences rather than large-scale behavior history.
 
-Some prompts to answer:
+Song object features used in this simulation:
 
-- What features does each `Song` use in your system
-  - For example: genre, mood, energy, tempo
-- What information does your `UserProfile` store
-- How does your `Recommender` compute a score for each song
-- How do you choose which songs to recommend
+- id
+- title
+- artist
+- genre
+- mood
+- energy
+- tempo_bpm
+- valence
+- danceability
+- acousticness
 
-You can include a simple diagram or bullet list if helpful.
+UserProfile features used in this simulation:
+
+- favorite_genre
+- favorite_mood
+- preferred_genres (ordered list for partial-credit matching)
+- preferred_moods (ordered list for partial-credit matching)
+- target_energy
+- likes_acoustic
+
+### Scoring Rule
+
+For each song, the recommender computes a weighted score from 0.0 to 1.0 using:
+
+- genre match: 0.30
+- mood match: 0.25
+- energy closeness to target: 0.20
+- acousticness closeness to preference: 0.15
+- tempo contribution: 0.05
+- danceability contribution: 0.03
+- valence contribution: 0.02
+
+Genre and mood are exact matches (1 or 0). Numeric features use a closeness function, where songs
+closer to the target value get higher points.
+
+For acousticness, the user preference is converted to a target:
+
+- likes_acoustic = true -> target 1.0
+- likes_acoustic = false -> target 0.0
+
+After scoring all songs, the system sorts by score in descending order and returns the top k songs.
+
+### Explanation Generation
+
+Each recommendation includes a short explanation based on the strongest matched factors, for example genre match, mood match, close energy, or acoustic fit.
+
+### Data Types in This Simulation
+
+Main data types currently used:
+
+- Song metadata: title, artist, genre, mood
+- Audio-style numeric features: energy, tempo_bpm, valence, danceability, acousticness
+- User preference inputs: favorite_genre, favorite_mood, preferred_genres, preferred_moods, target_energy, likes_acoustic
+
+Data types not included yet:
+
+- Explicit song likes/dislikes per user
+- Skip history
+- Play counts or repeat listens
+- Playlist membership or co-listen behavior
+
+This means the current system is content-based only. It ranks songs by feature similarity, not by behavioral interaction logs.
 
 ---
 
@@ -68,11 +114,37 @@ You can add more tests in `tests/test_recommender.py`.
 
 ## Experiments You Tried
 
-Use this section to document the experiments you ran. For example:
+### Taste Profile Critique
 
-- What happened when you changed the weight on genre from 2.0 to 0.5
-- What happened when you added tempo or valence to the score
-- How did your system behave for different types of users
+I tested this taste profile:
+
+- genre: hip hop
+- mood: confident
+- energy: 0.78
+- likes_acoustic: false
+
+To check whether the profile can separate contrasting styles, I compared one intense rock song with several chill lofi songs.
+
+- Storm Runner (rock, intense): score 0.362
+- Midnight Coding (lofi, chill): score 0.240
+- Focus Flow (lofi, focused): score 0.227
+- Library Rain (lofi, chill): score 0.200
+
+Interpretation:
+
+- The system does differentiate intense rock from chill lofi under this profile.
+- Most of the separation comes from energy and acousticness closeness, not genre or mood matches.
+- The profile is somewhat narrow because it uses one favorite genre and one favorite mood as exact matches.
+- This can under-represent users who like multiple genres or different moods in different contexts.
+
+### Design Decision Recorded
+
+Decision: expand the profile to support multiple preferred genres and moods.
+
+- New fields added: preferred_genres and preferred_moods.
+- These lists are ordered, so the first preference gets full categorical credit and lower-ranked preferences get partial credit.
+- Why: this makes the profile less narrow and better captures users who rotate between multiple genres/moods.
+- Result: the recommender can still separate very different styles (like intense rock vs chill lofi), while better rewarding secondary tastes instead of treating them as complete mismatches.
 
 ---
 

@@ -59,3 +59,19 @@ def test_explain_recommendation_returns_non_empty_string():
     explanation = rec.explain_recommendation(user, song)
     assert isinstance(explanation, str)
     assert explanation.strip() != ""
+
+
+def test_multi_preferences_with_partial_credit_affect_ranking():
+    user = UserProfile(
+        favorite_genre="hip hop",
+        favorite_mood="confident",
+        target_energy=0.8,
+        likes_acoustic=False,
+        preferred_genres=["hip hop", "lofi"],
+        preferred_moods=["confident", "chill"],
+    )
+    rec = make_small_recommender()
+    results = rec.recommend(user, k=2)
+
+    # Even without exact top-category matches, ranked preferences should help lofi/chill.
+    assert results[0].genre == "lofi"
