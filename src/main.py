@@ -12,32 +12,55 @@ You will implement the functions in recommender.py:
 from src.recommender import load_songs, recommend_songs
 
 
-# Specific taste profile used for recommendation comparisons.
-TASTE_PROFILE = {
+# User preference dictionaries representing distinct taste archetypes.
+
+HIGH_ENERGY_POP = {
     "genre": "pop",
     "mood": "happy",
-    "genres": ["pop"],
-    "moods": ["happy"],
-    "energy": 0.75,
+    "genres": ["pop", "funk", "indie pop"],
+    "moods": ["happy", "playful", "confident"],
+    "energy": 0.80,
+    "likes_acoustic": False,
+}
+
+CHILL_LOFI = {
+    "genre": "lofi",
+    "mood": "chill",
+    "genres": ["lofi", "ambient"],
+    "moods": ["chill", "focused", "peaceful"],
+    "energy": 0.35,
+    "likes_acoustic": True,
+}
+
+DEEP_INTENSE_ROCK = {
+    "genre": "rock",
+    "mood": "intense",
+    "genres": ["rock", "metal", "hip hop"],
+    "moods": ["intense", "aggressive", "confident"],
+    "energy": 0.90,
     "likes_acoustic": False,
 }
 
 
 def main() -> None:
     songs = load_songs("data/songs.csv")
-    print(f"Loaded songs: {len(songs)}")
+    print(f"Loaded {len(songs)} songs from catalog\n")
 
-    recommendations = recommend_songs(TASTE_PROFILE, songs, k=5)
+    for profile_name, profile in [
+        ("High-Energy Pop", HIGH_ENERGY_POP),
+        ("Chill Lofi", CHILL_LOFI),
+        ("Deep Intense Rock", DEEP_INTENSE_ROCK),
+    ]:
+        recommendations = recommend_songs(profile, songs, k=5)
 
-    divider = "-" * 45
-    print(f"\n{'Top Recommendations':^45}")
-    print(divider)
-    for i, rec in enumerate(recommendations, start=1):
-        song, score, _, reasons = rec
-        print(f" #{i}  {song['title']:<30} {score:.2f} / 5.00")
-        for reason in reasons:
-            print(f"      * {reason}")
+        divider = "-" * 60
+        print(f"\n{profile_name:^60}")
         print(divider)
+        for i, rec in enumerate(recommendations, start=1):
+            song, score, explanation, reasons = rec
+            print(f" #{i}  {song['title']:<35} Score: {score:.2f}")
+            print(f"      → {explanation}")
+            print(divider)
 
 
 if __name__ == "__main__":

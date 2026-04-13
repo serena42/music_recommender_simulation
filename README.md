@@ -142,6 +142,38 @@ You can add more tests in `tests/test_recommender.py`.
 
 ---
 
+## User Preference Profiles
+
+The recommender is tested with three distinct taste archetypes defined in `src/main.py`:
+
+### High-Energy Pop
+- Preferred genres: pop, funk, indie pop
+- Preferred moods: happy, playful, confident
+- Energy: 0.80 (high)
+- Acoustic preference: False
+
+Example top recommendation: "Sunrise City" (pop, happy, 0.82 energy)
+
+### Chill Lofi
+- Preferred genres: lofi, ambient
+- Preferred moods: chill, focused, peaceful
+- Energy: 0.35 (very low)
+- Acoustic preference: True
+
+Example top recommendation: "Library Rain" (lofi, chill, 0.35 energy, 0.86 acoustic)
+
+### Deep Intense Rock
+- Preferred genres: rock, metal, hip hop
+- Preferred moods: intense, aggressive, confident
+- Energy: 0.90 (very high)
+- Acoustic preference: False
+
+Example top recommendation: "Storm Runner" (rock, intense, 0.91 energy)
+
+These three profiles demonstrate the system's ability to differentiate between contrasting musical tastes. Run `python -m src.main` to see top-5 recommendations for each profile side-by-side.
+
+---
+
 ## Experiments You Tried
 
 ### Taste Profile Critique
