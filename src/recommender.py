@@ -40,8 +40,8 @@ def _closeness(target: float, value: float, max_range: float = 1.0) -> float:
 def _ranked_match(value: str, ordered_preferences: List[str]) -> float:
     """Return a partial-credit score based on where value appears in an ordered preference list.
 
-    The first preference earns 1.0, the second 0.8, the third 0.6, and so on,
-    with a floor of 0.4 so even the lowest-ranked match still contributes.
+    Uses exponential decay: 1st preference = 1.0 credit, 2nd = 0.8, 3rd = 0.64, 4th = 0.51, etc.
+    This ensures that even lower-ranked preferences still contribute meaningfully, without a hard floor.
     Matching is flexible: an exact match, a substring match in either direction
     (e.g. "pop" matches "indie pop"), all count equally.
     Returns 0.0 if value does not appear in the list at all.
@@ -55,8 +55,8 @@ def _ranked_match(value: str, ordered_preferences: List[str]) -> float:
     """
     for idx, pref in enumerate(ordered_preferences):
         if value == pref or pref in value or value in pref:
-            # First preference gets full credit, then gently decays.
-            return max(0.4, 1.0 - (0.2 * idx))
+            # Exponential decay: 0.8 ** idx gives smoother falloff than linear.
+            return 0.8 ** idx
     return 0.0
 
 
