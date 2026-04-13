@@ -2,12 +2,9 @@
 Command line runner for the Music Recommender Simulation.
 
 This file helps you quickly run and test your recommender.
-
-You will implement the functions in recommender.py:
-- load_songs
-- score_song
-- recommend_songs
 """
+
+import textwrap
 
 from src.recommender import load_songs, recommend_songs
 
@@ -123,14 +120,45 @@ def main() -> None:
     ]:
         recommendations = recommend_songs(profile, songs, k=5)
 
-        divider = "-" * 60
-        print(f"\n{profile_name:^60}")
-        print(divider)
+        rank_w = 4
+        title_w = 24
+        score_w = 7
+        reasons_w = 78
+
+        def border() -> str:
+            return (
+                "+"
+                + "-" * (rank_w + 2)
+                + "+"
+                + "-" * (title_w + 2)
+                + "+"
+                + "-" * (score_w + 2)
+                + "+"
+                + "-" * (reasons_w + 2)
+                + "+"
+            )
+
+        print(f"\n{profile_name}")
+        print(border())
+        print(
+            f"| {'#':<{rank_w}} | {'Song':<{title_w}} | {'Score':<{score_w}} | {'Reasons':<{reasons_w}} |"
+        )
+        print(border())
+
         for i, rec in enumerate(recommendations, start=1):
-            song, score, explanation, reasons = rec
-            print(f" #{i}  {song['title']:<35} Score: {score:.2f}")
-            print(f"      → {explanation}")
-            print(divider)
+            song, score, _, reasons = rec
+            reason_text = "; ".join(reasons) if reasons else "No strong factors"
+            wrapped_reasons = textwrap.wrap(reason_text, width=reasons_w) or [""]
+
+            first_line = wrapped_reasons[0]
+            print(
+                f"| {i:<{rank_w}} | {song['title']:<{title_w}} | {score:<{score_w}.2f} | {first_line:<{reasons_w}} |"
+            )
+            for continued in wrapped_reasons[1:]:
+                print(
+                    f"| {'':<{rank_w}} | {'':<{title_w}} | {'':<{score_w}} | {continued:<{reasons_w}} |"
+                )
+            print(border())
 
 
 if __name__ == "__main__":
