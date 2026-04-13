@@ -31,7 +31,7 @@ Prompts:
 
 Avoid code here. Pretend you are explaining the idea to a friend who does not program.
 
-Algorithm recipe: this recommender uses additive point scoring and ranking. Each song earns raw points across four features: a genre match is worth up to 2.0 points, a mood match up to 1.0 point, energy closeness up to 1.0 point, and acousticness closeness up to 1.0 point, for a maximum possible score of 5.0. Genre and mood use partial credit when a song matches a lower-ranked preference. Energy and acousticness use a closeness function — the nearer the song's value is to the user's target, the more points it earns. The four contributions are summed into one total score, all songs are sorted highest to lowest, and the top k results are returned with short explanations of the strongest matched factors.
+Algorithm recipe: this recommender uses additive point scoring and ranking. Each song earns raw points across four features: a genre match is worth up to 2.0 points, a mood match up to 1.0 point, energy closeness up to 1.0 point, and acousticness closeness up to 1.0 point, for a maximum possible score of 5.0. Genre and mood use ranked partial credit with exponential decay (1.0, 0.8, 0.64, 0.51, ...), so secondary preferences continue to matter. Energy and acousticness use a closeness function — the nearer the song's value is to the user's target, the more points it earns. Acoustic preference is modeled as a spectrum from 0.0 (prefers less acoustic) to 1.0 (prefers more acoustic), not a binary flag. The four contributions are summed into one total score, all songs are sorted highest to lowest, and the top k results are returned with short explanations of the strongest matched factors.
 
 Weighting rationale: genre counts twice as much as mood (2.0 vs 1.0) because genre is a strong long-term taste signal — most listeners have hard genre preferences — while mood is contextual and shifts with situation. Energy and acousticness are continuous signals that serve as meaningful tiebreakers between songs that already match on genre and mood.
 
@@ -41,13 +41,13 @@ Data flow:
 
 ```mermaid
 flowchart TD
-    A([User Preferences\ngenre · mood · energy · likes_acoustic]) --> B
+    A([User Preferences\ngenre · mood · energy · acoustic_preference]) --> B
 
     B[Load songs.csv\n18 songs → Song objects] --> C
 
     C{For each song in catalog} --> D
 
-    D[Score the song\ngenre match   → up to 2.0 pts\nmood match    → up to 1.0 pts\nenergy close  → up to 1.0 pts\nacoustic close→ up to 0.5 pts\n─────────────────────\ntotal score   ≤ 4.5 pts] --> E
+    D[Score the song\ngenre match   → up to 2.0 pts\nmood match    → up to 1.0 pts\nenergy close  → up to 1.0 pts\nacoustic close→ up to 1.0 pts\n─────────────────────\ntotal score   ≤ 5.0 pts] --> E
 
     E{More songs?}
     E -- Yes --> C
@@ -101,14 +101,18 @@ Genre and mood together account for 60% of the max possible score (3.0 out of 5.
 
 **Example:** Ultra Chill user (low energy target = 0.1) who loves lofi will be recommended more lofi songs even if a 0.12-energy ambient song would be a better match. Both are essentially the same energy, but lofi gets +2.0 genre points while ambient gets only 0.4 (secondary genre preference), so lofi dominates.
 
-**2. Binary Acoustic Preference Acts as Hard Filter (HIGH severity)**
+**2. Binary Acoustic Preference Acts as Hard Filter (HIGH severity) — MITIGATED**
 
-Acoustic preference is a boolean that converts to target = 1.0 (likes) or 0.0 (dislikes).
+Status: implemented in commit `fdd829f`.
 
-- A user who dislikes acoustic music gets closeness = 1 - |0.0 - 0.9| = 0.1 for a highly acoustic song (only 0.1 points, ~2% of score).
-- Even if that song perfectly matched genre, mood, energy, and mood (4.0 points), it scores 4.1 total.
-- But a non-acoustic song with just genre match (2.0 points) will beat it because acoustic is treated like a hard filter, not a preference.
-- **Effect:** Entire categories of music (acoustic-heavy genres like folk, blues, country for acoustic-disliker; electric heavy music for acoustic-lover) become essentially invisible.
+Acoustic preference is now a continuous value (`acoustic_preference` in [0.0, 1.0]) scored by closeness, instead of a boolean.
+
+- 0.0 means strongly non-acoustic preference
+- 1.0 means strongly acoustic preference
+- Mid values (for example 0.4 to 0.6) express mixed or flexible taste
+- Legacy boolean input is still accepted and mapped to 0.0/1.0 for backward compatibility
+
+Effect: acousticness is now a tunable preference rather than a hard gate, reducing the chance of hiding whole families of songs.
 
 **3. Energy Closeness Gap Narrows Recommendations for Flexible Users (MEDIUM severity)**
 
@@ -118,15 +122,19 @@ The closeness function uses a fixed max_range = 1.0 for energy (the full 0.0–1
 - Songs at 0.1 (very chill) or 0.9 (very energetic) score 0.6 closeness — good, but below the 0.7–1.0 band.
 - **Effect:** Users with flexible energy preferences (who could enjoy both a relaxing song and an upbeat one) get biased toward the narrow 0.4–0.6 band. A user who says "I enjoy both chill and energetic songs" gets recommendations only from 0.4–0.6.
 
-**4. Ranked Preference Decay Undervalues Secondary Tastes (MEDIUM severity)**
+**4. Ranked Preference Decay Undervalues Secondary Tastes (MEDIUM severity) — MITIGATED**
 
-Ranked preferences decay: 1st = 1.0 credit, 2nd = 0.8, 3rd = 0.6, 4th+ = floor at 0.4.
+Status: implemented in commit `c353b73`.
 
-- 1st genre choice: 1.0 × 2.0 = 2.0 points
-- 4th genre choice: 0.4 × 2.0 = 0.8 points
-- A song from a 4th-choice genre can score at most 0.8 + 1.0 + 1.0 + 1.0 = 3.8 points.
-- A song from the 1st genre gets at least 2.0 + something else.
-- **Effect:** Once users have 4+ genre preferences, lower-ranked ones barely matter. The "Everything Goes" adversarial profile (6 genres) effectively only uses the top 3.
+Ranked preferences now decay exponentially: `0.8 ** idx`.
+
+- 1st: 1.00
+- 2nd: 0.80
+- 3rd: 0.64
+- 4th: 0.51
+- 5th: 0.41
+
+Effect: secondary preferences retain meaningful influence without an abrupt floor, reducing over-concentration on only top-ranked tastes.
 
 **5. No Serendipity or Diversity Mechanism (MEDIUM severity)**
 
@@ -142,7 +150,7 @@ Danceability and valence (positivity) are loaded from the dataset but never scor
 - Songs with high danceability (for dance lovers) or high valence (for happy listeners) cannot be recommended based on these traits.
 - **Effect:** Entire patterns of taste go unaddressed. A user who wants upbeat music has no explicit way to signal that; they must infer it through energy and mood alone.
 
-### Suggested Fixes
+### Suggested Fixes and Implementation Status
 
 **Fix #1: Reduce Genre Weight & Add Diversity Penalty (addresses Filter Bubble #1 & #5)**
 
@@ -150,7 +158,7 @@ Change weights from (genre=2.0, mood=1.0, energy=1.0, acoustic=1.0) to (genre=1.
 
 Then add a diversity penalty to top-k selection: once a song is recommended, reduce the score of songs with the same genre by 0.3 × remaining_points. This encourages the top-5 to be more varied while still respecting preferences.
 
-**Fix #2: Replace Boolean Acoustic with Spectrum (addresses Filter Bubble #2)**
+**Fix #2: Replace Boolean Acoustic with Spectrum (addresses Filter Bubble #2) — COMPLETED**
 
 Instead of `likes_acoustic: bool`, use `acoustic_preference: float in [0.0, 1.0]`, where 0.0 = "prefers non-acoustic" and 1.0 = "prefers acoustic."
 
@@ -164,7 +172,7 @@ Accept an optional `energy_flexibility: float` parameter (default 0.5 = medium f
 
 Use `max_range = 1.0 - (0.5 * energy_flexibility)` to adjust the closeness calculation. A user with flexibility=1.0 (very flexible) gets max_range=0.5, so energy values 0.25 and 0.75 still score 0.5 points. A user with flexibility=0.0 (rigid) gets max_range=1.0, so only much closer values score high.
 
-**Fix #4: Slower Ranked Preference Decay (addresses Filter Bubble #4)**
+**Fix #4: Slower Ranked Preference Decay (addresses Filter Bubble #4) — COMPLETED**
 
 Change the decay formula from `1.0 - (0.2 * idx)` to `0.8 ** idx` (exponential decay with base 0.8).
 
@@ -209,13 +217,13 @@ No need for numeric metrics unless you created some.
 
 Ideas for how you would improve the model next.
 
-**Immediate priority: mitigate filter bubbles identified in Section 6.**
+**Immediate priority: mitigate remaining filter bubbles identified in Section 6.**
 
-- Implement diversity penalty in top-k selection to reduce genre/mood clustering.
-- Replace boolean acoustic preference with a spectrum (0.0–1.0), removing the hard filter.
+- ✅ Introduced slower ranked preference decay (exponential instead of linear) so secondary tastes have real impact.
+- ✅ Replaced boolean acoustic preference with a spectrum (0.0–1.0), removing the hard filter.
 - Add user flexibility parameters for energy and mood so contextual preferences are supported.
-- Introduce slower ranked preference decay (exponential instead of linear) so secondary tastes have real impact.
 - Score missing features (danceability, valence) for users who care about them.
+- Implement diversity penalty in top-k selection to reduce genre/mood clustering.
 
 **Medium-term enhancements:**
 
@@ -236,4 +244,4 @@ Prompts:
 - Something unexpected or interesting you discovered  
 - How this changed the way you think about music recommendation apps  
 
-I asked Claude to help design a math-based scoring rule for my music recommender, and we chose a closeness approach for numeric features so songs score higher when they are nearer to the user’s target values, not simply higher or lower overall. For example, a song with energy very close to the user’s preferred energy gets more points than songs far above or below that target. We then combined numeric closeness with categorical matches (genre and mood) using additive point values, which keeps the model simple and interpretable. After comparing approaches, we moved from a normalized weight system (all weights summing to 1.0) to an explicit point recipe: genre is worth 2.0 points, mood 1.0, energy up to 1.0, and acousticness up to 0.5. The 2-to-1 genre-to-mood ratio was a deliberate design choice — genre tends to be a hard filter for most listeners while mood shifts with context. This process helped me understand how recommendation systems turn user preferences into measurable rules and how weight choices directly shape the final ranking.
+I asked Claude to help design a math-based scoring rule for my music recommender, and we chose a closeness approach for numeric features so songs score higher when they are nearer to the user’s target values, not simply higher or lower overall. For example, a song with energy very close to the user’s preferred energy gets more points than songs far above or below that target. We then combined numeric closeness with categorical matches (genre and mood) using additive point values, which keeps the model simple and interpretable. After comparing approaches, we moved from a normalized weight system (all weights summing to 1.0) to an explicit point recipe: genre is worth 2.0 points, mood 1.0, energy up to 1.0, and acousticness up to 1.0. The 2-to-1 genre-to-mood ratio was a deliberate design choice — genre tends to be a hard filter for most listeners while mood shifts with context. This process helped me understand how recommendation systems turn user preferences into measurable rules and how weight choices directly shape the final ranking.
