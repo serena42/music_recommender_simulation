@@ -24,7 +24,8 @@ TASTE_PROFILE = {
 
 
 def main() -> None:
-    songs = load_songs("data/songs.csv") 
+    songs = load_songs("data/songs.csv")
+    print(f"Loaded songs: {len(songs)}")
 
     recommendations = recommend_songs(TASTE_PROFILE, songs, k=5)
 
