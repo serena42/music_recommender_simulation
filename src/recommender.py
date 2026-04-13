@@ -20,13 +20,39 @@ FEATURE_WEIGHTS = {
 
 
 def _closeness(target: float, value: float, max_range: float = 1.0) -> float:
-    """Returns a normalized similarity in [0, 1]."""
+    """Return a similarity score in [0.0, 1.0] based on how close value is to target.
+
+    A perfect match (value == target) returns 1.0. The score decreases linearly
+    as the distance grows, reaching 0.0 when the distance equals max_range.
+
+    Args:
+        target: The ideal value the user is looking for.
+        value: The song's actual value for this feature.
+        max_range: The maximum meaningful distance (default 1.0 for 0–1 features).
+
+    Returns:
+        A float in [0.0, 1.0] where 1.0 means a perfect match.
+    """
     distance = abs(target - value)
     return max(0.0, 1.0 - (distance / max_range))
 
 
 def _ranked_match(value: str, ordered_preferences: List[str]) -> float:
-    """Returns partial credit based on preference rank for categorical values."""
+    """Return a partial-credit score based on where value appears in an ordered preference list.
+
+    The first preference earns 1.0, the second 0.8, the third 0.6, and so on,
+    with a floor of 0.4 so even the lowest-ranked match still contributes.
+    Matching is flexible: an exact match, a substring match in either direction
+    (e.g. "pop" matches "indie pop"), all count equally.
+    Returns 0.0 if value does not appear in the list at all.
+
+    Args:
+        value: The song's categorical value (e.g. its genre or mood).
+        ordered_preferences: The user's preferences ranked from most to least preferred.
+
+    Returns:
+        A float in [0.0, 1.0] representing how well value matches the user's preferences.
+    """
     for idx, pref in enumerate(ordered_preferences):
         if value == pref or pref in value or value in pref:
             # First preference gets full credit, then gently decays.
@@ -35,17 +61,50 @@ def _ranked_match(value: str, ordered_preferences: List[str]) -> float:
 
 
 def _genre_preferences(user: UserProfile) -> List[str]:
+    """Return the user's ordered genre preferences, falling back to favorite_genre if needed.
+
+    Args:
+        user: The UserProfile to read preferences from.
+
+    Returns:
+        A non-empty list of genre strings ordered from most to least preferred.
+    """
     prefs = user.preferred_genres if user.preferred_genres else [user.favorite_genre]
     return [p for p in prefs if p]
 
 
 def _mood_preferences(user: UserProfile) -> List[str]:
+    """Return the user's ordered mood preferences, falling back to favorite_mood if needed.
+
+    Args:
+        user: The UserProfile to read preferences from.
+
+    Returns:
+        A non-empty list of mood strings ordered from most to least preferred.
+    """
     prefs = user.preferred_moods if user.preferred_moods else [user.favorite_mood]
     return [p for p in prefs if p]
 
 
 def _score_song(song: Song, user: UserProfile) -> Tuple[float, Dict[str, float], List[str]]:
-    """Scores a song and returns total score, per-feature contributions, and reason strings."""
+    """Score a single song against a user profile using the additive point recipe.
+
+    Each feature contributes raw points (not normalized fractions) according to
+    FEATURE_WEIGHTS. Categorical features (genre, mood) use _ranked_match for
+    partial credit; numeric features (energy, acousticness) use _closeness.
+    Only features that score above 0 are included in the reasons list.
+
+    Args:
+        song: The Song to evaluate.
+        user: The UserProfile containing the user's preferences.
+
+    Returns:
+        A tuple of:
+        - total_score (float): Sum of all feature contributions, max 5.0.
+        - contributions (Dict[str, float]): Points earned per feature.
+        - reasons (List[str]): Human-readable strings for each non-zero contribution,
+          e.g. ["genre match (+2.00)", "energy closeness (+0.93)"].
+    """
     contributions: Dict[str, float] = {}
     reasons: List[str] = []
 
@@ -72,7 +131,21 @@ def _score_song(song: Song, user: UserProfile) -> Tuple[float, Dict[str, float],
 
 
 def _build_explanation(song: Song, user: UserProfile, contributions: Dict[str, float]) -> str:
-    """Builds a short explanation grounded in top positive factors."""
+    """Build a prose explanation of why a song was recommended.
+
+    Checks each feature in priority order and appends a plain-English phrase
+    for each strong match. Falls back to naming the top-scoring feature if no
+    individual threshold is met.
+
+    Args:
+        song: The recommended Song.
+        user: The UserProfile the song was scored against.
+        contributions: The per-feature point contributions from _score_song.
+
+    Returns:
+        A semicolon-separated string of reasons, e.g.
+        "matches your favorite genre (pop); has an energy level close to your target".
+    """
     reasons = []
 
     if _ranked_match(song.genre, _genre_preferences(user)) > 0:
@@ -98,9 +171,19 @@ def _build_explanation(song: Song, user: UserProfile, contributions: Dict[str, f
 
 @dataclass
 class Song:
-    """
-    Represents a song and its attributes.
-    Required by tests/test_recommender.py
+    """A single song and its audio feature attributes loaded from the catalog.
+
+    Attributes:
+        id: Unique integer identifier from songs.csv.
+        title: Display name of the song.
+        artist: Artist or band name.
+        genre: Primary genre tag (e.g. "pop", "lofi", "hip hop").
+        mood: Emotional character of the track (e.g. "happy", "chill", "intense").
+        energy: Perceived intensity and activity level, 0.0 (calm) to 1.0 (energetic).
+        tempo_bpm: Beats per minute.
+        valence: Musical positivity, 0.0 (negative) to 1.0 (positive).
+        danceability: How suitable the track is for dancing, 0.0 to 1.0.
+        acousticness: Likelihood the track is acoustic, 0.0 to 1.0.
     """
     id: int
     title: str
@@ -113,11 +196,20 @@ class Song:
     danceability: float
     acousticness: float
 
+
 @dataclass
 class UserProfile:
-    """
-    Represents a user's taste preferences.
-    Required by tests/test_recommender.py
+    """A user's stated music taste preferences used to score and rank songs.
+
+    Attributes:
+        favorite_genre: The user's top genre preference.
+        favorite_mood: The user's top mood preference.
+        target_energy: Ideal energy level the user wants, 0.0 to 1.0.
+        likes_acoustic: True if the user prefers acoustic tracks, False otherwise.
+        preferred_genres: Optional ordered list of genres (most to least preferred).
+            Falls back to [favorite_genre] when not provided.
+        preferred_moods: Optional ordered list of moods (most to least preferred).
+            Falls back to [favorite_mood] when not provided.
     """
     favorite_genre: str
     favorite_mood: str
@@ -127,14 +219,30 @@ class UserProfile:
     preferred_moods: Optional[List[str]] = None
 
 class Recommender:
+    """OOP wrapper around the scoring and ranking logic.
+
+    Holds a catalog of Song objects and exposes methods to generate ranked
+    recommendations and plain-English explanations for a given UserProfile.
     """
-    OOP implementation of the recommendation logic.
-    Required by tests/test_recommender.py
-    """
+
     def __init__(self, songs: List[Song]):
+        """Initialise the recommender with a catalog of songs.
+
+        Args:
+            songs: List of Song objects to score and rank against.
+        """
         self.songs = songs
 
     def recommend(self, user: UserProfile, k: int = 5) -> List[Song]:
+        """Return the top k songs ranked by score for the given user.
+
+        Args:
+            user: The UserProfile to score songs against.
+            k: Number of results to return (default 5).
+
+        Returns:
+            A list of up to k Song objects sorted highest score first.
+        """
         scored: List[Tuple[Song, float]] = []
         for song in self.songs:
             score, _, _ = _score_song(song, user)
@@ -144,13 +252,30 @@ class Recommender:
         return [song for song, _ in scored[:k]]
 
     def explain_recommendation(self, user: UserProfile, song: Song) -> str:
+        """Return a prose explanation of why song was recommended for user.
+
+        Args:
+            user: The UserProfile the song was scored against.
+            song: The Song to explain.
+
+        Returns:
+            A semicolon-separated string of plain-English reasons.
+        """
         _, contributions, _ = _score_song(song, user)
         return _build_explanation(song, user, contributions)
 
 def load_songs(csv_path: str) -> List[Dict]:
-    """
-    Loads songs from a CSV file.
-    Required by src/main.py
+    """Load songs from a CSV file and return them as a list of dictionaries.
+
+    Each row becomes a dict keyed by column name. Numeric fields
+    (energy, tempo_bpm, valence, danceability, acousticness) are cast to
+    float so arithmetic operations work without further conversion.
+
+    Args:
+        csv_path: Path to the CSV file (e.g. "data/songs.csv").
+
+    Returns:
+        A list of dicts, one per song, with string and float values.
     """
     import csv
     songs = []
@@ -166,9 +291,21 @@ def load_songs(csv_path: str) -> List[Dict]:
     return songs
 
 def recommend_songs(user_prefs: Dict, songs: List[Dict], k: int = 5) -> List[Tuple[Dict, float, str]]:
-    """
-    Functional implementation of the recommendation logic.
-    Required by src/main.py
+    """Score every song in the catalog and return the top k results.
+
+    Converts raw dicts (from load_songs) into typed Song and UserProfile
+    objects, scores each song with _score_song, then returns the highest-
+    scoring results sorted from best to worst.
+
+    Args:
+        user_prefs: Dict of user preference keys — "genre", "mood", "energy",
+            "likes_acoustic", and optionally "genres" and "moods" for ranked lists.
+        songs: List of song dicts as returned by load_songs.
+        k: Number of recommendations to return (default 5).
+
+    Returns:
+        A list of up to k tuples of (song_dict, score, explanation, reasons),
+        sorted highest score first.
     """
     user = UserProfile(
         favorite_genre=user_prefs.get("genre", ""),
