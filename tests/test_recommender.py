@@ -35,6 +35,7 @@ def test_recommend_returns_songs_sorted_by_score():
         favorite_genre="pop",
         favorite_mood="happy",
         target_energy=0.8,
+        energy_flexibility=0.5,
         acoustic_preference=0.0,
     )
     rec = make_small_recommender()
@@ -51,6 +52,7 @@ def test_explain_recommendation_returns_non_empty_string():
         favorite_genre="pop",
         favorite_mood="happy",
         target_energy=0.8,
+        energy_flexibility=0.5,
         acoustic_preference=0.0,
     )
     rec = make_small_recommender()
@@ -66,6 +68,7 @@ def test_multi_preferences_with_partial_credit_affect_ranking():
         favorite_genre="hip hop",
         favorite_mood="confident",
         target_energy=0.8,
+        energy_flexibility=0.5,
         acoustic_preference=0.0,
         preferred_genres=["hip hop", "lofi"],
         preferred_moods=["confident", "chill"],
@@ -98,6 +101,7 @@ def test_exponential_decay_for_ranked_genres():
         favorite_genre="pop",
         favorite_mood="happy",
         target_energy=0.5,
+        energy_flexibility=0.5,
         acoustic_preference=0.0,
         preferred_genres=["pop", "jazz", "rock", "blues", "classical"],
     )
@@ -127,6 +131,7 @@ def test_energy_closeness_scoring():
         favorite_genre="pop",
         favorite_mood="happy",
         target_energy=0.8,
+        energy_flexibility=0.5,
         acoustic_preference=0.0,
     )
     
@@ -155,6 +160,7 @@ def test_acoustic_preference_spectrum_matching():
         favorite_genre="folk",
         favorite_mood="peaceful",
         target_energy=0.3,
+        energy_flexibility=0.5,
         acoustic_preference=1.0,
     )
     results_acoustic = rec.recommend(acoustic_lover, k=2)
@@ -165,6 +171,7 @@ def test_acoustic_preference_spectrum_matching():
         favorite_genre="pop",
         favorite_mood="happy",
         target_energy=0.7,
+        energy_flexibility=0.5,
         acoustic_preference=0.0,
     )
     results_electric = rec.recommend(electric_lover, k=2)
@@ -175,6 +182,7 @@ def test_acoustic_preference_spectrum_matching():
         favorite_genre="pop",
         favorite_mood="happy",
         target_energy=0.6,
+        energy_flexibility=0.5,
         acoustic_preference=0.5,
     )
     results_balanced = rec.recommend(balanced_user, k=2)
@@ -196,6 +204,7 @@ def test_genre_substring_matching():
         favorite_genre="pop",
         favorite_mood="happy",
         target_energy=0.6,
+        energy_flexibility=0.5,
         acoustic_preference=0.0,
     )
     
@@ -218,6 +227,7 @@ def test_no_matching_genre_still_scores_other_features():
         favorite_genre="rock",
         favorite_mood="peaceful",
         target_energy=0.3,
+        energy_flexibility=0.5,
         acoustic_preference=1.0,
     )
     
@@ -233,6 +243,7 @@ def test_explanation_includes_matching_features():
         favorite_genre="pop",
         favorite_mood="happy",
         target_energy=0.8,
+        energy_flexibility=0.5,
         acoustic_preference=0.0,
     )
     rec = make_small_recommender()
@@ -258,6 +269,7 @@ def test_recommend_respects_k_parameter():
         favorite_genre="pop",
         favorite_mood="happy",
         target_energy=0.5,
+        energy_flexibility=0.5,
         acoustic_preference=0.0,
     )
     
@@ -287,6 +299,7 @@ def test_conflicting_preferences_with_ranked_backup():
         favorite_genre="jazz",  # Not in catalog
         favorite_mood="peaceful",
         target_energy=0.9,
+        energy_flexibility=0.5,
         acoustic_preference=1.0,
         preferred_genres=["jazz", "classical"],
     )
@@ -302,6 +315,7 @@ def test_empty_ranked_preferences():
         favorite_genre="pop",
         favorite_mood="happy",
         target_energy=0.5,
+        energy_flexibility=0.5,
         acoustic_preference=0.0,
         preferred_genres=[],  # Empty list
         preferred_moods=[],   # Empty list
@@ -320,6 +334,7 @@ def test_score_consistency_across_calls():
         favorite_genre="pop",
         favorite_mood="happy",
         target_energy=0.8,
+        energy_flexibility=0.5,
         acoustic_preference=0.0,
     )
     rec = make_small_recommender()
@@ -333,3 +348,86 @@ def test_score_consistency_across_calls():
     # Ordering should be identical
     assert [r.id for r in results_1] == [r.id for r in results_2]
     assert [r.id for r in results_2] == [r.id for r in results_3]
+
+
+def test_energy_flexibility_changes_energy_tolerance():
+    """Flexible users should keep farther energy values more competitive."""
+    from src.recommender import _score_song
+
+    songs = [
+        Song(id=1, title="Target", artist="Artist", genre="pop", mood="happy",
+             energy=0.5, tempo_bpm=100, valence=0.5, danceability=0.5, acousticness=0.5),
+        Song(id=2, title="Far", artist="Artist", genre="pop", mood="happy",
+             energy=0.9, tempo_bpm=100, valence=0.5, danceability=0.5, acousticness=0.5),
+    ]
+    rec = Recommender(songs)
+
+    rigid_user = UserProfile(
+        favorite_genre="pop",
+        favorite_mood="happy",
+        target_energy=0.5,
+        energy_flexibility=0.0,
+        acoustic_preference=0.5,
+    )
+    flexible_user = UserProfile(
+        favorite_genre="pop",
+        favorite_mood="happy",
+        target_energy=0.5,
+        energy_flexibility=1.0,
+        acoustic_preference=0.5,
+    )
+
+    target_score_rigid, _, _ = _score_song(songs[0], rigid_user)
+    far_score_rigid, _, _ = _score_song(songs[1], rigid_user)
+    target_score_flexible, _, _ = _score_song(songs[0], flexible_user)
+    far_score_flexible, _, _ = _score_song(songs[1], flexible_user)
+
+    rigid_gap = target_score_rigid - far_score_rigid
+    flexible_gap = target_score_flexible - far_score_flexible
+
+    # Flexible matching should reduce the penalty for farther energies.
+    assert flexible_gap < rigid_gap
+
+
+def test_recommend_songs_reads_energy_flexibility_from_dict():
+    """Functional API should honor energy_flexibility from user preference dict."""
+    from src.recommender import recommend_songs
+
+    songs = [
+        {
+            "id": "1",
+            "title": "Near Energy",
+            "artist": "Artist",
+            "genre": "pop",
+            "mood": "happy",
+            "energy": 0.5,
+            "tempo_bpm": 100,
+            "valence": 0.5,
+            "danceability": 0.5,
+            "acousticness": 0.5,
+        },
+        {
+            "id": "2",
+            "title": "Far Energy",
+            "artist": "Artist",
+            "genre": "pop",
+            "mood": "happy",
+            "energy": 0.95,
+            "tempo_bpm": 100,
+            "valence": 0.5,
+            "danceability": 0.5,
+            "acousticness": 0.5,
+        },
+    ]
+
+    user = {
+        "genre": "pop",
+        "mood": "happy",
+        "energy": 0.5,
+        "energy_flexibility": 1.0,
+        "acoustic_preference": 0.5,
+    }
+
+    results = recommend_songs(user, songs, k=2)
+    assert len(results) == 2
+    assert results[0][0]["title"] == "Near Energy"

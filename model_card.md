@@ -31,7 +31,7 @@ Prompts:
 
 Avoid code here. Pretend you are explaining the idea to a friend who does not program.
 
-Algorithm recipe: this recommender uses additive point scoring and ranking. Each song earns raw points across four features: a genre match is worth up to 2.0 points, a mood match up to 1.0 point, energy closeness up to 1.0 point, and acousticness closeness up to 1.0 point, for a maximum possible score of 5.0. Genre and mood use ranked partial credit with exponential decay (1.0, 0.8, 0.64, 0.51, ...), so secondary preferences continue to matter. Energy and acousticness use a closeness function — the nearer the song's value is to the user's target, the more points it earns. Acoustic preference is modeled as a spectrum from 0.0 (prefers less acoustic) to 1.0 (prefers more acoustic), not a binary flag. The four contributions are summed into one total score, all songs are sorted highest to lowest, and the top k results are returned with short explanations of the strongest matched factors.
+Algorithm recipe: this recommender uses additive point scoring and ranking. Each song earns raw points across four features: a genre match is worth up to 2.0 points, a mood match up to 1.0 point, energy closeness up to 1.0 point, and acousticness closeness up to 1.0 point, for a maximum possible score of 5.0. Genre and mood use ranked partial credit with exponential decay (1.0, 0.8, 0.64, 0.51, ...), so secondary preferences continue to matter. Energy and acousticness use a closeness function — the nearer the song's value is to the user's target, the more points it earns. Energy closeness now supports a user-specific flexibility control (`energy_flexibility`), which widens or narrows the accepted energy range. Acoustic preference is modeled as a spectrum from 0.0 (prefers less acoustic) to 1.0 (prefers more acoustic), not a binary flag. The four contributions are summed into one total score, all songs are sorted highest to lowest, and the top k results are returned with short explanations of the strongest matched factors.
 
 Weighting rationale: genre counts twice as much as mood (2.0 vs 1.0) because genre is a strong long-term taste signal — most listeners have hard genre preferences — while mood is contextual and shifts with situation. Energy and acousticness are continuous signals that serve as meaningful tiebreakers between songs that already match on genre and mood.
 
@@ -41,7 +41,7 @@ Data flow:
 
 ```mermaid
 flowchart TD
-    A([User Preferences\ngenre · mood · energy · acoustic_preference]) --> B
+    A([User Preferences\ngenre · mood · energy · energy_flexibility · acoustic_preference]) --> B
 
     B[Load songs.csv\n18 songs → Song objects] --> C
 
@@ -114,13 +114,17 @@ Acoustic preference is now a continuous value (`acoustic_preference` in [0.0, 1.
 
 Effect: acousticness is now a tunable preference rather than a hard gate, reducing the chance of hiding whole families of songs.
 
-**3. Energy Closeness Gap Narrows Recommendations for Flexible Users (MEDIUM severity)**
+**3. Energy Closeness Gap Narrows Recommendations for Flexible Users (MEDIUM severity) — MITIGATED**
 
-The closeness function uses a fixed max_range = 1.0 for energy (the full 0.0–1.0 scale).
+Status: implemented in the current codebase (Fix #3 rollout).
 
-- For a user with target_energy = 0.5 (middle ground), songs from 0.4 to 0.6 cluster at high closeness scores (0.8–1.0).
-- Songs at 0.1 (very chill) or 0.9 (very energetic) score 0.6 closeness — good, but below the 0.7–1.0 band.
-- **Effect:** Users with flexible energy preferences (who could enjoy both a relaxing song and an upbeat one) get biased toward the narrow 0.4–0.6 band. A user who says "I enjoy both chill and energetic songs" gets recommendations only from 0.4–0.6.
+Energy scoring now includes `energy_flexibility` in [0.0, 1.0]. The model maps this to a dynamic energy range:
+
+- `max_range = 0.5 + (0.5 * energy_flexibility)`
+- flexibility 0.0 (strict) -> max_range 0.5
+- flexibility 1.0 (flexible) -> max_range 1.0
+
+Effect: users who are flexible on energy preserve stronger scores for farther energy values, reducing over-concentration in a narrow mid-energy band.
 
 **4. Ranked Preference Decay Undervalues Secondary Tastes (MEDIUM severity) — MITIGATED**
 
@@ -166,11 +170,11 @@ Score acousticness exactly like energy: `_closeness(user.acoustic_preference, so
 
 This removes the hard filter and allows nuance (e.g., "I slightly prefer acoustic" = 0.6).
 
-**Fix #3: Adjust Energy Range Based on User Flexibility (addresses Filter Bubble #3)**
+**Fix #3: Adjust Energy Range Based on User Flexibility (addresses Filter Bubble #3) — COMPLETED**
 
 Accept an optional `energy_flexibility: float` parameter (default 0.5 = medium flexibility).
 
-Use `max_range = 1.0 - (0.5 * energy_flexibility)` to adjust the closeness calculation. A user with flexibility=1.0 (very flexible) gets max_range=0.5, so energy values 0.25 and 0.75 still score 0.5 points. A user with flexibility=0.0 (rigid) gets max_range=1.0, so only much closer values score high.
+Use `max_range = 0.5 + (0.5 * energy_flexibility)` to adjust the closeness calculation. A user with flexibility=1.0 (very flexible) gets max_range=1.0, so farther energy values still retain credit. A user with flexibility=0.0 (rigid) gets max_range=0.5, so only closer values score highly.
 
 **Fix #4: Slower Ranked Preference Decay (addresses Filter Bubble #4) — COMPLETED**
 
@@ -221,7 +225,7 @@ Ideas for how you would improve the model next.
 
 - ✅ Introduced slower ranked preference decay (exponential instead of linear) so secondary tastes have real impact.
 - ✅ Replaced boolean acoustic preference with a spectrum (0.0–1.0), removing the hard filter.
-- Add user flexibility parameters for energy and mood so contextual preferences are supported.
+- ✅ Added user energy flexibility so contextual energy preferences are supported.
 - Score missing features (danceability, valence) for users who care about them.
 - Implement diversity penalty in top-k selection to reduce genre/mood clustering.
 

@@ -37,6 +37,16 @@ def _closeness(target: float, value: float, max_range: float = 1.0) -> float:
     return max(0.0, 1.0 - (distance / max_range))
 
 
+def _energy_max_range(flexibility: float) -> float:
+    """Map energy flexibility in [0, 1] to a scoring range in [0.5, 1.0].
+
+    Lower flexibility narrows tolerance (stricter energy matching).
+    Higher flexibility widens tolerance (broader energy matching).
+    """
+    bounded = min(1.0, max(0.0, flexibility))
+    return 0.5 + (0.5 * bounded)
+
+
 def _ranked_match(value: str, ordered_preferences: List[str]) -> float:
     """Return a partial-credit score based on where value appears in an ordered preference list.
 
@@ -113,7 +123,12 @@ def _score_song(song: Song, user: UserProfile) -> Tuple[float, Dict[str, float],
 
     contributions["genre"] = FEATURE_WEIGHTS["genre"] * genre_match
     contributions["mood"] = FEATURE_WEIGHTS["mood"] * mood_match
-    contributions["energy"] = FEATURE_WEIGHTS["energy"] * _closeness(user.target_energy, song.energy)
+    energy_range = _energy_max_range(user.energy_flexibility)
+    contributions["energy"] = FEATURE_WEIGHTS["energy"] * _closeness(
+        user.target_energy,
+        song.energy,
+        max_range=energy_range,
+    )
     contributions["acousticness"] = FEATURE_WEIGHTS["acousticness"] * _closeness(
         user.acoustic_preference,
         song.acousticness,
@@ -154,7 +169,11 @@ def _build_explanation(song: Song, user: UserProfile, contributions: Dict[str, f
         reasons.append(f"matches your favorite genre ({song.genre})")
     if _ranked_match(song.mood, _mood_preferences(user)) > 0:
         reasons.append(f"fits your preferred mood ({song.mood})")
-    if _closeness(user.target_energy, song.energy) >= 0.8:
+    if _closeness(
+        user.target_energy,
+        song.energy,
+        max_range=_energy_max_range(user.energy_flexibility),
+    ) >= 0.8:
         reasons.append("has an energy level close to your target")
 
     if _closeness(user.acoustic_preference, song.acousticness) >= 0.8:
@@ -208,6 +227,8 @@ class UserProfile:
         favorite_genre: The user's top genre preference.
         favorite_mood: The user's top mood preference.
         target_energy: Ideal energy level the user wants, 0.0 to 1.0.
+        energy_flexibility: How strict energy matching should be, 0.0 to 1.0.
+            0.0 means stricter matching; 1.0 means more flexible matching.
         acoustic_preference: Preferred acousticness from 0.0 to 1.0.
             0.0 means strongly non-acoustic, 1.0 means strongly acoustic.
         preferred_genres: Optional ordered list of genres (most to least preferred).
@@ -218,6 +239,7 @@ class UserProfile:
     favorite_genre: str
     favorite_mood: str
     target_energy: float
+    energy_flexibility: float = 0.5
     acoustic_preference: float = 0.5
     preferred_genres: Optional[List[str]] = None
     preferred_moods: Optional[List[str]] = None
@@ -303,8 +325,9 @@ def recommend_songs(user_prefs: Dict, songs: List[Dict], k: int = 5) -> List[Tup
 
     Args:
         user_prefs: Dict of user preference keys — "genre", "mood", "energy",
-            "acoustic_preference" (0.0-1.0), and optionally "genres" and "moods"
-            for ranked lists. Legacy "likes_acoustic" is still accepted.
+            "energy_flexibility" (0.0-1.0), "acoustic_preference" (0.0-1.0),
+            and optionally "genres" and "moods" for ranked lists.
+            Legacy "likes_acoustic" is still accepted.
         songs: List of song dicts as returned by load_songs.
         k: Number of recommendations to return (default 5).
 
@@ -322,6 +345,7 @@ def recommend_songs(user_prefs: Dict, songs: List[Dict], k: int = 5) -> List[Tup
         favorite_genre=user_prefs.get("genre", ""),
         favorite_mood=user_prefs.get("mood", ""),
         target_energy=float(user_prefs.get("energy", 0.5)),
+        energy_flexibility=float(user_prefs.get("energy_flexibility", 0.5)),
         acoustic_preference=float(acoustic_pref),
         preferred_genres=user_prefs.get("genres"),
         preferred_moods=user_prefs.get("moods"),

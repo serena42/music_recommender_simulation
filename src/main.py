@@ -20,6 +20,7 @@ HIGH_ENERGY_POP = {
     "genres": ["pop", "funk", "indie pop"],
     "moods": ["happy", "playful", "confident"],
     "energy": 0.80,
+    "energy_flexibility": 0.35,
     "acoustic_preference": 0.1,
 }
 
@@ -29,6 +30,7 @@ CHILL_LOFI = {
     "genres": ["lofi", "ambient"],
     "moods": ["chill", "focused", "peaceful"],
     "energy": 0.35,
+    "energy_flexibility": 0.7,
     "acoustic_preference": 0.9,
 }
 
@@ -38,6 +40,7 @@ DEEP_INTENSE_ROCK = {
     "genres": ["rock", "metal", "hip hop"],
     "moods": ["intense", "aggressive", "confident"],
     "energy": 0.90,
+    "energy_flexibility": 0.2,
     "acoustic_preference": 0.05,
 }
 
@@ -49,6 +52,7 @@ CONFLICTING_VIBE = {
     "genres": ["blues", "jazz"],
     "moods": ["melancholic", "moody"],
     "energy": 0.90,  # Very high energy but melancholic mood—direct conflict
+    "energy_flexibility": 0.85,
     "acoustic_preference": 0.9,
 }
 
@@ -58,6 +62,7 @@ ULTRA_CHILL = {
     "genres": ["ambient", "classical"],
     "moods": ["peaceful", "relaxed"],
     "energy": 0.10,  # Extremely low energy boundary
+    "energy_flexibility": 0.25,
     "acoustic_preference": 0.95,
 }
 
@@ -67,6 +72,7 @@ PURE_ADRENALINE = {
     "genres": ["edm", "metal", "rock"],
     "moods": ["euphoric", "aggressive"],
     "energy": 0.98,  # Extremely high energy boundary
+    "energy_flexibility": 0.15,
     "acoustic_preference": 0.0,
 }
 
@@ -76,6 +82,7 @@ ACOUSTIC_ROCKER = {
     "genres": ["rock", "metal"],
     "moods": ["intense", "aggressive"],
     "energy": 0.85,
+    "energy_flexibility": 0.5,
     "acoustic_preference": 0.8,  # Unusual: rock fans rarely want acoustic
 }
 
@@ -85,6 +92,7 @@ EVERYTHING_GOES = {
     "genres": ["pop", "rock", "lofi", "jazz", "edm", "classical"],  # No clear hierarchy
     "moods": ["happy", "intense", "chill", "moody", "peaceful"],
     "energy": 0.50,  # Middle ground
+    "energy_flexibility": 1.0,
     "acoustic_preference": 0.4,
 }
 
